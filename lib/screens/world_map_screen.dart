@@ -10,6 +10,7 @@ import '../data/countries.dart';
 import '../services/country_polygons.dart';
 import '../models/country.dart';
 import 'country_list_screen.dart';
+import 'country_detail_screen.dart';
 
 class WorldMapScreen extends StatefulWidget {
   const WorldMapScreen({super.key});
@@ -18,13 +19,15 @@ class WorldMapScreen extends StatefulWidget {
   State<WorldMapScreen> createState() => _WorldMapScreenState();
 }
 
-class _WorldMapScreenState extends State<WorldMapScreen> {
+class _WorldMapScreenState extends State<WorldMapScreen> with SingleTickerProviderStateMixin {
   static const _visitedKey = 'codes';
   static const _flashDuration = Duration(milliseconds: 450);
 
   late final Box<dynamic> _visitedBox;
   CountryPolygons? _countryPolygons;
   bool _loadingPolygons = true;
+  bool _isSelectMode = false;
+  late AnimationController _fabAnimationController;
 
   final MapController _mapController = MapController();
   String? _hoverCode;
@@ -40,6 +43,10 @@ class _WorldMapScreenState extends State<WorldMapScreen> {
   @override
   void initState() {
     super.initState();
+    _fabAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
     _visitedBox = Hive.box('visited_countries');
     if (!_visitedBox.containsKey(_visitedKey)) {
       _visitedBox.put(_visitedKey, <String>[]);
@@ -55,6 +62,7 @@ class _WorldMapScreenState extends State<WorldMapScreen> {
   @override
   void dispose() {
     _flashTimer?.cancel();
+    _fabAnimationController.dispose();
     super.dispose();
   }
 
@@ -104,30 +112,48 @@ class _WorldMapScreenState extends State<WorldMapScreen> {
   void _handleTap(TapPosition position, LatLng latLng) {
     if (_countryPolygons == null) return;
 
-    _triggerFlash(latLng);
-
     final code = _countryPolygons!.findCountryCodeContaining(latLng);
     if (code == null) return;
 
-    final visited = _readVisited(_visitedBox);
-    final wasVisited = visited.contains(code);
-    if (wasVisited) {
-      visited.remove(code);
-    } else {
-      visited.add(code);
-    }
-    _writeVisited(visited);
+    if (_isSelectMode) {
+      _triggerFlash(latLng);
+      
+      final visited = _readVisited(_visitedBox);
+      final wasVisited = visited.contains(code);
+      if (wasVisited) {
+        visited.remove(code);
+      } else {
+        visited.add(code);
+      }
+      _writeVisited(visited);
 
-    final country = CountriesData.findByCode(code);
-    if (!mounted || country == null) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '${country.name} ${wasVisited ? 'removed' : 'added'}',
+      final country = CountriesData.findByCode(code);
+      if (!mounted || country == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${country.name} ${wasVisited ? 'removed' : 'added'}',
+          ),
+          duration: const Duration(milliseconds: 900),
+          behavior: SnackBarBehavior.floating,
         ),
-        duration: const Duration(milliseconds: 900),
-      ),
-    );
+      );
+    } else {
+      final country = CountriesData.findByCode(code);
+      if (country == null) return;
+      
+      Navigator.of(context).push(
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => CountryDetailScreen(
+            countryCode: country.code,
+            countryName: country.name,
+          ),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+        ),
+      );
+    }
   }
 
   void _triggerFlash(LatLng point) {
@@ -153,12 +179,60 @@ class _WorldMapScreenState extends State<WorldMapScreen> {
     }
   }
 
+  void _toggleMode() {
+    setState(() {
+      _isSelectMode = !_isSelectMode;
+      if (_isSelectMode) {
+        _fabAnimationController.forward();
+      } else {
+        _fabAnimationController.reverse();
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Travel Tracker'),
         actions: [
+          // Mode Indicator Chip
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: _isSelectMode 
+                    ? Colors.green.withOpacity(0.2) 
+                    : Colors.grey.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: _isSelectMode ? Colors.green : Colors.grey,
+                  width: 1.5,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _isSelectMode ? Icons.edit : Icons.visibility,
+                    size: 16,
+                    color: _isSelectMode ? Colors.green.shade700 : Colors.grey.shade700,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _isSelectMode ? 'Select Mode' : 'View Mode',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _isSelectMode ? Colors.green.shade700 : Colors.grey.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.list),
             tooltip: 'Select Countries',
@@ -173,26 +247,53 @@ class _WorldMapScreenState extends State<WorldMapScreen> {
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(
-            child: _loadingPolygons
-                ? const Center(child: CircularProgressIndicator())
-                : ValueListenableBuilder<Box<dynamic>>(
-                    valueListenable:
-                        _visitedBox.listenable(keys: const [_visitedKey]),
-                    builder: (context, box, _) {
-                      final visited = _readVisited(box);
-                      return _buildMap(visited);
-                    },
-                  ),
+          Column(
+            children: [
+              Expanded(
+                child: _loadingPolygons
+                    ? const Center(child: CircularProgressIndicator())
+                    : ValueListenableBuilder<Box<dynamic>>(
+                        valueListenable:
+                            _visitedBox.listenable(keys: const [_visitedKey]),
+                        builder: (context, box, _) {
+                          final visited = _readVisited(box);
+                          return _buildMap(visited);
+                        },
+                      ),
+              ),
+              ValueListenableBuilder<Box<dynamic>>(
+                valueListenable: _visitedBox.listenable(keys: const [_visitedKey]),
+                builder: (context, box, _) {
+                  final visited = _readVisited(box);
+                  return _FooterStats(visitedCodes: visited);
+                },
+              ),
+            ],
           ),
-          ValueListenableBuilder<Box<dynamic>>(
-            valueListenable: _visitedBox.listenable(keys: const [_visitedKey]),
-            builder: (context, box, _) {
-              final visited = _readVisited(box);
-              return _FooterStats(visitedCodes: visited);
-            },
+          // Toggle FAB - moved higher
+          Positioned(
+            right: 16,
+            bottom: 180,
+            child: FloatingActionButton(
+              onPressed: _toggleMode,
+              backgroundColor: _isSelectMode ? Colors.green : const Color(0xFF4E79A7),
+              tooltip: _isSelectMode ? 'Switch to View Mode' : 'Switch to Select Mode',
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                transitionBuilder: (child, animation) {
+                  return RotationTransition(
+                    turns: Tween(begin: 0.0, end: 1.0).animate(animation),
+                    child: FadeTransition(opacity: animation, child: child),
+                  );
+                },
+                child: Icon(
+                  _isSelectMode ? Icons.check : Icons.add,
+                  key: ValueKey(_isSelectMode),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -212,12 +313,12 @@ class _WorldMapScreenState extends State<WorldMapScreen> {
       final isHover = _hoverCode == code && !isVisited;
 
       final fillColor = isVisited
-          ? Colors.blue.shade400.withOpacity(0.75)
+          ? const Color(0xFF4E79A7).withOpacity(0.72)
           : isHover
               ? Colors.blueGrey.shade400.withOpacity(0.65)
               : Colors.grey.shade300.withOpacity(0.85);
       final borderColor = isVisited
-          ? Colors.blue.shade700
+          ? const Color(0xFF4E79A7)
           : isHover
               ? Colors.blueGrey.shade600
               : Colors.grey.shade500;
@@ -267,7 +368,7 @@ class _WorldMapScreenState extends State<WorldMapScreen> {
                 point: _flashPoint!,
                 radius: 6,
                 useRadiusInMeter: false,
-                color: Colors.blueAccent.withOpacity(0.85),
+                color: const Color(0xFF4E79A7).withOpacity(0.85),
                 borderColor: Colors.white,
                 borderStrokeWidth: 1.5,
               ),
@@ -316,7 +417,16 @@ class _FooterStats extends StatelessWidget {
     );
 
     return Container(
-      color: Colors.white,
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.95),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       child: Center(
         child: Wrap(
@@ -349,9 +459,16 @@ class _ContinentCard extends StatelessWidget {
       width: 150,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
+        color: Colors.white,
         border: Border.all(color: Colors.grey.shade300),
         borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -382,11 +499,18 @@ class _ContinentCard extends StatelessWidget {
           const SizedBox(height: 6),
           ClipRRect(
             borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: pct.clamp(0.0, 1.0),
-              minHeight: 5,
-              backgroundColor: Colors.grey[300],
-              color: Colors.blueAccent,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.0, end: pct.clamp(0.0, 1.0)),
+              duration: const Duration(milliseconds: 800),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, child) {
+                return LinearProgressIndicator(
+                  value: value,
+                  minHeight: 5,
+                  backgroundColor: Colors.grey[300],
+                  color: const Color(0xFF4E79A7),
+                );
+              },
             ),
           ),
           const SizedBox(height: 6),
@@ -418,12 +542,12 @@ class _TotalPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border.all(color: Colors.blue.shade200),
+        border: Border.all(color: const Color(0xFF4E79A7).withOpacity(0.3)),
         borderRadius: BorderRadius.circular(999),
         boxShadow: [
           BoxShadow(
-            color: Colors.blue.withOpacity(0.08),
-            blurRadius: 6,
+            color: const Color(0xFF4E79A7).withOpacity(0.12),
+            blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
