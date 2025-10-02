@@ -25,6 +25,20 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
   bool _isLoading = true;
   Timer? _autoSaveTimer;
 
+  // Map country codes to flag emoji
+  static const Map<String, String> _flagEmojis = {
+    'US': '🇺🇸', 'CA': '🇨🇦', 'MX': '🇲🇽', 'BR': '🇧🇷', 'AR': '🇦🇷',
+    'GB': '🇬🇧', 'FR': '🇫🇷', 'DE': '🇩🇪', 'IT': '🇮🇹', 'ES': '🇪🇸',
+    'CN': '🇨🇳', 'JP': '🇯🇵', 'IN': '🇮🇳', 'AU': '🇦🇺', 'RU': '🇷🇺',
+    'ZA': '🇿🇦', 'EG': '🇪🇬', 'NG': '🇳🇬', 'KE': '🇰🇪', 'MA': '🇲🇦',
+    'CZ': '🇨🇿', 'PL': '🇵🇱', 'NL': '🇳🇱', 'SE': '🇸🇪', 'NO': '🇳🇴',
+    'DK': '🇩🇰', 'FI': '🇫🇮', 'PT': '🇵🇹', 'GR': '🇬🇷', 'TR': '🇹🇷',
+    'TH': '🇹🇭', 'VN': '🇻🇳', 'ID': '🇮🇩', 'MY': '🇲🇾', 'SG': '🇸🇬',
+    'PH': '🇵🇭', 'KR': '🇰🇷', 'NZ': '🇳🇿', 'CL': '🇨🇱', 'CO': '🇨🇴',
+    'PE': '🇵🇪', 'VE': '🇻🇪', 'UA': '🇺🇦', 'RO': '🇷🇴', 'HU': '🇭🇺',
+    'AT': '🇦🇹', 'CH': '🇨🇭', 'BE': '🇧🇪', 'IE': '🇮🇪', 'CR': '🇨🇷',
+  };
+
   @override
   void initState() {
     super.initState();
@@ -68,10 +82,17 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
     
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Journal saved!'),
-        duration: Duration(milliseconds: 1500),
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.white),
+            const SizedBox(width: 12),
+            Text('${widget.countryName} saved!'),
+          ],
+        ),
+        duration: const Duration(milliseconds: 1500),
         behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF4E79A7),
       ),
     );
   }
@@ -121,7 +142,7 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text('Cancel', style: TextStyle(color: Colors.grey[600])),
           ),
           TextButton(
             onPressed: () {
@@ -139,27 +160,23 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
   }
 
   void _viewPhoto(String path) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.black,
-        child: Stack(
-          children: [
-            Center(
-              child: Image.file(
-                File(path),
-                fit: BoxFit.contain,
-              ),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.close, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
             ),
-            Positioned(
-              top: 16,
-              right: 16,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () => Navigator.pop(context),
-              ),
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              child: Image.file(File(path)),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -173,202 +190,335 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
           title: Text(widget.countryName),
           backgroundColor: const Color(0xFF4E79A7),
         ),
-        body: const Center(child: CircularProgressIndicator()),
+        body: const Center(
+          child: CircularProgressIndicator(
+            color: Color(0xFF4E79A7),
+          ),
+        ),
       );
     }
 
+    final flag = _flagEmojis[widget.countryCode] ?? '🏳️';
+
     return Scaffold(
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: Text(widget.countryName),
         backgroundColor: const Color(0xFF4E79A7),
+        elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.save),
+            icon: const Icon(Icons.save_rounded),
             onPressed: _saveJournal,
             tooltip: 'Save Journal',
           ),
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Country Header
+            // Header with flag
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
                   colors: [
-                    const Color(0xFF4E79A7).withOpacity(0.1),
-                    const Color(0xFF4E79A7).withOpacity(0.05),
+                    const Color(0xFF4E79A7),
+                    const Color(0xFF4E79A7).withOpacity(0.8),
                   ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
                 ),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF4E79A7).withOpacity(0.3)),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF4E79A7).withOpacity(0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
+              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
               child: Column(
                 children: [
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: Text(
+                        flag,
+                        style: const TextStyle(fontSize: 48),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   Text(
                     widget.countryName,
                     style: const TextStyle(
-                      fontSize: 24,
+                      fontSize: 28,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF4E79A7),
+                      color: Colors.white,
+                      letterSpacing: 0.5,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    widget.countryCode,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                      letterSpacing: 1.5,
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      widget.countryCode,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 2,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 24),
 
-            // Journal Section
-            const Text(
-              'Journal Entry',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _journalController,
-              maxLines: 8,
-              decoration: InputDecoration(
-                hintText: 'Write your memories, thoughts, and experiences...',
-                hintStyle: TextStyle(color: Colors.grey[400]),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Color(0xFF4E79A7), width: 2),
-                ),
-                filled: true,
-                fillColor: Colors.grey[50],
-                suffixIcon: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Text(
-                    'Auto-save',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey[500],
-                    ),
+            // Content
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Journal Section
+                  _SectionHeader(
+                    icon: Icons.article_rounded,
+                    title: 'Journal Entry',
                   ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Photos Section
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Photos',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: _addPhoto,
-                  icon: const Icon(Icons.add_photo_alternate),
-                  label: const Text('Add Photo'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4E79A7),
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            
-            // Photo Grid
-            if (_photos.isEmpty)
-              Container(
-                padding: const EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey[300]!),
-                ),
-                child: Center(
-                  child: Column(
-                    children: [
-                      Icon(Icons.photo_library, size: 48, color: Colors.grey[400]),
-                      const SizedBox(height: 8),
-                      Text(
-                        'No photos yet',
-                        style: TextStyle(color: Colors.grey[600]),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                ),
-                itemCount: _photos.length,
-                itemBuilder: (context, index) {
-                  return GestureDetector(
-                    onTap: () => _viewPhoto(_photos[index]),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.file(
-                            File(_photos[index]),
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                        Positioned(
-                          top: 4,
-                          right: 4,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: IconButton(
-                              icon: const Icon(Icons.close, size: 16, color: Colors.white),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 24,
-                                minHeight: 24,
-                              ),
-                              onPressed: () => _removePhoto(index),
-                            ),
-                          ),
+                  const SizedBox(height: 12),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.04),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
                         ),
                       ],
                     ),
-                  );
-                },
+                    child: TextField(
+                      controller: _journalController,
+                      maxLines: 10,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        height: 1.6,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Share your experiences, memories, and thoughts about ${widget.countryName}...',
+                        hintStyle: TextStyle(
+                          color: Colors.grey[400],
+                          fontSize: 14,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF4E79A7),
+                            width: 2,
+                          ),
+                        ),
+                        contentPadding: const EdgeInsets.all(20),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(Icons.auto_awesome, size: 14, color: Colors.grey[500]),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Auto-saves as you type',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[500],
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Photos Section
+                  _SectionHeader(
+                    icon: Icons.photo_library_rounded,
+                    title: 'Photos',
+                    action: TextButton.icon(
+                      onPressed: _addPhoto,
+                      icon: const Icon(Icons.add_photo_alternate_rounded, size: 18),
+                      label: const Text('Add Photo'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF4E79A7),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  if (_photos.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(48),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey[200]!),
+                      ),
+                      child: Center(
+                        child: Column(
+                          children: [
+                            Icon(
+                              Icons.photo_camera_rounded,
+                              size: 56,
+                              color: Colors.grey[300],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No photos yet',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey[500],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Add photos to remember your journey',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey[400],
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                      ),
+                      itemCount: _photos.length,
+                      itemBuilder: (context, index) {
+                        return GestureDetector(
+                          onTap: () => _viewPhoto(_photos[index]),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.file(
+                                    File(_photos[index]),
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                Positioned(
+                                  top: 6,
+                                  right: 6,
+                                  child: GestureDetector(
+                                    onTap: () => _removePhoto(index),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withOpacity(0.6),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.close,
+                                        size: 16,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  const SizedBox(height: 32),
+                ],
               ),
+            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final Widget? action;
+
+  const _SectionHeader({
+    required this.icon,
+    required this.title,
+    this.action,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 24, color: const Color(0xFF4E79A7)),
+            const SizedBox(width: 10),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ],
+        ),
+        if (action != null) action!,
+      ],
     );
   }
 }

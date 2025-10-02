@@ -17,7 +17,12 @@ class CountryPolygons {
     final data = json.decode(raw) as Map<String, dynamic>;
     final features = data['features'] as List<dynamic>? ?? <dynamic>[];
 
+    print('DEBUG: Total features in GeoJSON: ${features.length}');
+
     final Map<String, List<CountryPolygon>> byCode = {};
+    int successfullyParsed = 0;
+    int skippedNoCode = 0;
+    int skippedNoGeometry = 0;
 
     for (final feature in features) {
       if (feature is! Map<String, dynamic>) continue;
@@ -26,6 +31,7 @@ class CountryPolygons {
 
       final code = _extractIsoCode(properties);
       if (code == null || code.isEmpty || code == 'AQ') {
+        skippedNoCode++;
         continue;
       }
 
@@ -52,9 +58,31 @@ class CountryPolygons {
         }
       }
 
-      if (polygons.isEmpty) continue;
+      if (polygons.isEmpty) {
+        skippedNoGeometry++;
+        if (code == 'US' || code == 'TZ' || code == 'GL') {
+          print('WARNING: Country $code has NO polygons! Type: $type, Coordinates structure issue');
+        }
+        continue;
+      }
 
       byCode.putIfAbsent(code, () => <CountryPolygon>[]).addAll(polygons);
+      successfullyParsed++;
+
+      if (code == 'US' || code == 'TZ' || code == 'GL') {
+        print('✓ Successfully loaded $code with ${polygons.length} polygon(s)');
+      }
+    }
+
+    print('DEBUG: Successfully parsed: $successfullyParsed countries');
+    print('DEBUG: Skipped (no code): $skippedNoCode');
+    print('DEBUG: Skipped (no geometry): $skippedNoGeometry');
+    print('DEBUG: Total countries in map: ${byCode.length}');
+    
+    final testCodes = ['US', 'TZ', 'GL', 'BR', 'CN'];
+    print('DEBUG: Test countries present:');
+    for (final code in testCodes) {
+      print('  - $code: ${byCode.containsKey(code) ? "YES (${byCode[code]!.length} polygons)" : "NO"}');
     }
 
     return CountryPolygons._(byCode);
@@ -73,6 +101,7 @@ class CountryPolygons {
 
   static String? _extractIsoCode(Map<String, dynamic> properties) {
     const isoKeys = [
+      'ISO3166-1-Alpha-2',
       'ISO_A2',
       'iso_a2',
       'ISO2',
@@ -162,10 +191,8 @@ class CountryPolygon {
       final yj = ring[j].latitude;
 
       final intersects = ((yi > point.latitude) != (yj > point.latitude)) &&
-          (point.longitude <
-              (xj - xi) * (point.latitude - yi) /
-                      ((yj - yi) == 0 ? 1e-12 : (yj - yi)) +
-                  xi);
+          (point.longitude < (xj - xi) * (point.latitude - yi) / ((yj - yi) == 0 ? 1e-12 : (yj - yi)) + xi);
+      
       if (intersects) inside = !inside;
     }
     return inside;

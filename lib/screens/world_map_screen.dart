@@ -194,9 +194,19 @@ class _WorldMapScreenState extends State<WorldMapScreen> with SingleTickerProvid
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Travel Tracker'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        toolbarHeight: 56,
+        title: const Text(
+          'Travel Tracker',
+          style: TextStyle(
+            color: Color(0xFF2C3E50),
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.3,
+          ),
+        ),
         actions: [
-          // Mode Indicator Chip
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: AnimatedContainer(
@@ -204,11 +214,13 @@ class _WorldMapScreenState extends State<WorldMapScreen> with SingleTickerProvid
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: _isSelectMode 
-                    ? Colors.green.withOpacity(0.2) 
-                    : Colors.grey.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(16),
+                    ? const Color(0xFF4E79A7).withOpacity(0.15)
+                    : Colors.grey.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: _isSelectMode ? Colors.green : Colors.grey,
+                  color: _isSelectMode 
+                      ? const Color(0xFF4E79A7) 
+                      : Colors.grey.shade400,
                   width: 1.5,
                 ),
               ),
@@ -218,15 +230,19 @@ class _WorldMapScreenState extends State<WorldMapScreen> with SingleTickerProvid
                   Icon(
                     _isSelectMode ? Icons.edit : Icons.visibility,
                     size: 16,
-                    color: _isSelectMode ? Colors.green.shade700 : Colors.grey.shade700,
+                    color: _isSelectMode 
+                        ? const Color(0xFF4E79A7) 
+                        : Colors.grey.shade700,
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    _isSelectMode ? 'Select Mode' : 'View Mode',
+                    _isSelectMode ? 'Select' : 'View',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: _isSelectMode ? Colors.green.shade700 : Colors.grey.shade700,
+                      color: _isSelectMode 
+                          ? const Color(0xFF4E79A7) 
+                          : Colors.grey.shade700,
                     ),
                   ),
                 ],
@@ -234,8 +250,8 @@ class _WorldMapScreenState extends State<WorldMapScreen> with SingleTickerProvid
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.list),
-            tooltip: 'Select Countries',
+            icon: Icon(Icons.menu, color: Colors.grey.shade700),
+            tooltip: 'Menu',
             onPressed: () async {
               await Navigator.of(context).push(
                 MaterialPageRoute(
@@ -245,6 +261,7 @@ class _WorldMapScreenState extends State<WorldMapScreen> with SingleTickerProvid
               setState(() {});
             },
           ),
+          const SizedBox(width: 4),
         ],
       ),
       body: Stack(
@@ -272,25 +289,28 @@ class _WorldMapScreenState extends State<WorldMapScreen> with SingleTickerProvid
               ),
             ],
           ),
-          // Toggle FAB - moved higher
           Positioned(
             right: 16,
             bottom: 180,
-            child: FloatingActionButton(
-              onPressed: _toggleMode,
-              backgroundColor: _isSelectMode ? Colors.green : const Color(0xFF4E79A7),
-              tooltip: _isSelectMode ? 'Switch to View Mode' : 'Switch to Select Mode',
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                transitionBuilder: (child, animation) {
-                  return RotationTransition(
-                    turns: Tween(begin: 0.0, end: 1.0).animate(animation),
-                    child: FadeTransition(opacity: animation, child: child),
-                  );
-                },
-                child: Icon(
-                  _isSelectMode ? Icons.check : Icons.add,
-                  key: ValueKey(_isSelectMode),
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: FloatingActionButton(
+                onPressed: _toggleMode,
+                backgroundColor: _isSelectMode ? Colors.green : const Color(0xFF4E79A7),
+                tooltip: _isSelectMode ? 'Switch to View Mode' : 'Switch to Select Mode',
+                elevation: 6,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  transitionBuilder: (child, animation) {
+                    return RotationTransition(
+                      turns: Tween(begin: 0.0, end: 1.0).animate(animation),
+                      child: FadeTransition(opacity: animation, child: child),
+                    );
+                  },
+                  child: Icon(
+                    _isSelectMode ? Icons.check : Icons.add,
+                    key: ValueKey(_isSelectMode),
+                  ),
                 ),
               ),
             ),
@@ -313,15 +333,15 @@ class _WorldMapScreenState extends State<WorldMapScreen> with SingleTickerProvid
       final isHover = _hoverCode == code && !isVisited;
 
       final fillColor = isVisited
-          ? const Color(0xFF4E79A7).withOpacity(0.72)
-          : isHover
-              ? Colors.blueGrey.shade400.withOpacity(0.65)
-              : Colors.grey.shade300.withOpacity(0.85);
-      final borderColor = isVisited
           ? const Color(0xFF4E79A7)
           : isHover
-              ? Colors.blueGrey.shade600
-              : Colors.grey.shade500;
+              ? const Color(0xFF4E79A7).withOpacity(0.4)
+              : Colors.grey.shade300.withOpacity(0.9);
+      final borderColor = isVisited
+          ? const Color(0xFF375A7F)
+          : isHover
+              ? const Color(0xFF4E79A7)
+              : Colors.grey.shade400;
 
       for (final polygon in entry.value) {
         flutterPolygons.add(
@@ -356,9 +376,9 @@ class _WorldMapScreenState extends State<WorldMapScreen> with SingleTickerProvid
         onPointerHover: _handleHover,
       ),
       children: [
-        TileLayer(
-          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName: 'com.example.travel_tracker',
+        // Solid ocean background instead of tiles
+        Container(
+          color: const Color(0xFFB8D4E8),
         ),
         PolygonLayer(polygons: flutterPolygons),
         if (_flashPoint != null)
@@ -457,16 +477,16 @@ class _ContinentCard extends StatelessWidget {
     final pctLabel = '${(pct * 100).toStringAsFixed(0)}%';
     return Container(
       width: 150,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(color: Colors.grey.shade300),
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -481,42 +501,47 @@ class _ContinentCard extends StatelessWidget {
                   label,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 12.5,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
+                    letterSpacing: 0.2,
                   ),
                 ),
               ),
               Text(
                 pctLabel,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.black87,
-                  fontWeight: FontWeight.w500,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: Colors.grey[700],
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(999),
             child: TweenAnimationBuilder<double>(
               tween: Tween(begin: 0.0, end: pct.clamp(0.0, 1.0)),
-              duration: const Duration(milliseconds: 800),
+              duration: const Duration(milliseconds: 1000),
               curve: Curves.easeOutCubic,
               builder: (context, value, child) {
                 return LinearProgressIndicator(
                   value: value,
-                  minHeight: 5,
-                  backgroundColor: Colors.grey[300],
+                  minHeight: 6,
+                  backgroundColor: Colors.grey[200],
                   color: const Color(0xFF4E79A7),
                 );
               },
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Text(
             '$visited / $total',
-            style: TextStyle(fontSize: 10.5, color: Colors.grey[700]),
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ],
       ),
@@ -538,17 +563,24 @@ class _TotalPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      height: 56,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: const Color(0xFF4E79A7).withOpacity(0.3)),
+        gradient: LinearGradient(
+          colors: [
+            Colors.white,
+            const Color(0xFF4E79A7).withOpacity(0.03),
+          ],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        border: Border.all(color: const Color(0xFF4E79A7).withOpacity(0.4)),
         borderRadius: BorderRadius.circular(999),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF4E79A7).withOpacity(0.12),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: const Color(0xFF4E79A7).withOpacity(0.15),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -556,9 +588,10 @@ class _TotalPill extends StatelessWidget {
       child: Text(
         '${(pct * 100).toStringAsFixed(0)}%  |  $visited / $total',
         style: const TextStyle(
-          fontSize: 13.5,
-          fontWeight: FontWeight.w600,
-          color: Colors.black87,
+          fontSize: 14.5,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF2C3E50),
+          letterSpacing: 0.5,
         ),
       ),
     );
