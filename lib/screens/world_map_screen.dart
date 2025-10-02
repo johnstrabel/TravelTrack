@@ -13,6 +13,7 @@ import '../services/country_polygons.dart';
 import '../models/country.dart';
 import 'country_list_screen.dart';
 import 'country_detail_screen.dart';
+import 'profile_screen.dart';
 
 class WorldMapScreen extends StatefulWidget {
   const WorldMapScreen({super.key});
@@ -244,26 +245,38 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
         toolbarHeight: 64,
         title: Row(
           children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF5B7C99), Color(0xFF7A9BB8)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+            GestureDetector(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ProfileScreen(),
+                  ),
+                );
+              },
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF5B7C99),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(
-                Icons.public,
-                color: Colors.white,
-                size: 20,
+                child: const Icon(
+                  Icons.person,
+                  color: Colors.white,
+                  size: 20,
+                ),
               ),
             ),
             const SizedBox(width: 12),
             const Text(
-              'Travel Tracker',
+              'Your Map',
               style: TextStyle(
                 color: Color(0xFF2C3E50),
                 fontSize: 20,
@@ -310,15 +323,18 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
           Container(
             margin: const EdgeInsets.only(right: 8),
             decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: Colors.grey.shade300,
-                width: 1,
-              ),
+              color: const Color(0xFF5B7C99),
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.12),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: IconButton(
-              icon: const Icon(Icons.list_rounded, color: Color(0xFF2C3E50)),
+              icon: const Icon(Icons.list_rounded, color: Colors.white),
               tooltip: 'Country List',
               onPressed: () async {
                 await Navigator.of(context).push(

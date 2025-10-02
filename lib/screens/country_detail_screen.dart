@@ -20,12 +20,25 @@ class CountryDetailScreen extends StatefulWidget {
 
 class _CountryDetailScreenState extends State<CountryDetailScreen> {
   late final Box<dynamic> _dataBox;
-  final TextEditingController _journalController = TextEditingController();
+  
+  // Category controllers
+  final TextEditingController _mustSeesController = TextEditingController();
+  final TextEditingController _hiddenGemsController = TextEditingController();
+  final TextEditingController _restaurantsController = TextEditingController();
+  final TextEditingController _barsController = TextEditingController();
+  
   final TextEditingController _cityController = TextEditingController();
-  List<String> _photos = [];
+  
+  // Photos with captions
+  List<Map<String, String>> _photosWithCaptions = [];
+  
   List<String> _cities = [];
   int _rating = 0;
   DateTime? _visitedDate;
+  
+  // Daily journal entries: [{date: "2025-01-15", text: "..."}]
+  List<Map<String, String>> _dailyEntries = [];
+  
   bool _isLoading = true;
   Timer? _autoSaveTimer;
 
@@ -55,19 +68,24 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
   void initState() {
     super.initState();
     _loadData();
-    _journalController.addListener(_onJournalChanged);
+    _mustSeesController.addListener(_onTextChanged);
+    _hiddenGemsController.addListener(_onTextChanged);
+    _restaurantsController.addListener(_onTextChanged);
+    _barsController.addListener(_onTextChanged);
   }
 
   @override
   void dispose() {
     _autoSaveTimer?.cancel();
-    _journalController.removeListener(_onJournalChanged);
-    _journalController.dispose();
+    _mustSeesController.dispose();
+    _hiddenGemsController.dispose();
+    _restaurantsController.dispose();
+    _barsController.dispose();
     _cityController.dispose();
     super.dispose();
   }
 
-  void _onJournalChanged() {
+  void _onTextChanged() {
     _autoSaveTimer?.cancel();
     _autoSaveTimer = Timer(const Duration(seconds: 2), () {
       _saveDataSilently();
@@ -79,14 +97,48 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
     final countryData = _dataBox.get(widget.countryCode) as Map?;
     
     if (countryData != null) {
-      _journalController.text = countryData['journal'] as String? ?? '';
-      _photos = List<String>.from(countryData['photos'] as List? ?? []);
+      _mustSeesController.text = countryData['mustSees'] as String? ?? '';
+      _hiddenGemsController.text = countryData['hiddenGems'] as String? ?? '';
+      _restaurantsController.text = countryData['restaurants'] as String? ?? '';
+      _barsController.text = countryData['bars'] as String? ?? '';
+      
+      // Load photos with captions
+      final photosList = countryData['photos'] as List?;
+      if (photosList != null) {
+        _photosWithCaptions = photosList.map((item) {
+          if (item is Map) {
+            return {
+              'path': item['path'] as String? ?? '',
+              'caption': item['caption'] as String? ?? '',
+            };
+          } else if (item is String) {
+            // Migration from old format
+            return {'path': item, 'caption': ''};
+          }
+          return {'path': '', 'caption': ''};
+        }).toList();
+      }
+      
       _cities = List<String>.from(countryData['cities'] as List? ?? []);
       _rating = countryData['rating'] as int? ?? 0;
       
       final dateString = countryData['visitedDate'] as String?;
       if (dateString != null) {
         _visitedDate = DateTime.tryParse(dateString);
+      }
+      
+      // Load daily entries
+      final entriesList = countryData['dailyEntries'] as List?;
+      if (entriesList != null) {
+        _dailyEntries = entriesList.map((item) {
+          if (item is Map) {
+            return {
+              'date': item['date'] as String? ?? '',
+              'text': item['text'] as String? ?? '',
+            };
+          }
+          return {'date': '', 'text': ''};
+        }).where((e) => e['date']!.isNotEmpty).toList();
       }
     }
     
@@ -115,11 +167,15 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
 
   Future<void> _saveDataSilently() async {
     final data = {
-      'journal': _journalController.text,
-      'photos': _photos,
+      'mustSees': _mustSeesController.text,
+      'hiddenGems': _hiddenGemsController.text,
+      'restaurants': _restaurantsController.text,
+      'bars': _barsController.text,
+      'photos': _photosWithCaptions,
       'cities': _cities,
       'rating': _rating,
       'visitedDate': _visitedDate?.toIso8601String(),
+      'dailyEntries': _dailyEntries,
     };
     
     await _dataBox.put(widget.countryCode, data);
@@ -136,7 +192,7 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
         final filePath = result.files.first.path;
         if (filePath != null) {
           setState(() {
-            _photos.add(filePath);
+            _photosWithCaptions.add({'path': filePath, 'caption': ''});
           });
           await _saveDataSilently();
         }
@@ -153,6 +209,44 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
     }
   }
 
+  void _editPhotoCaption(int index) {
+    final captionController = TextEditingController(
+      text: _photosWithCaptions[index]['caption'],
+    );
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add Caption'),
+        content: TextField(
+          controller: captionController,
+          decoration: const InputDecoration(
+            hintText: 'What\'s happening here?',
+            border: OutlineInputBorder(),
+          ),
+          maxLines: 3,
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel', style: TextStyle(color: Colors.grey[600])),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _photosWithCaptions[index]['caption'] = captionController.text;
+              });
+              _saveDataSilently();
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _removePhoto(int index) {
     showDialog(
       context: context,
@@ -167,7 +261,7 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
           TextButton(
             onPressed: () {
               setState(() {
-                _photos.removeAt(index);
+                _photosWithCaptions.removeAt(index);
               });
               _saveDataSilently();
               Navigator.pop(context);
@@ -179,7 +273,8 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
     );
   }
 
-  void _viewPhoto(String path) {
+  void _viewPhoto(int index) {
+    final photo = _photosWithCaptions[index];
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => Scaffold(
@@ -191,13 +286,57 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
               icon: const Icon(Icons.close, color: Colors.white),
               onPressed: () => Navigator.pop(context),
             ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.edit, color: Colors.white),
+                onPressed: () {
+                  Navigator.pop(context);
+                  _editPhotoCaption(index);
+                },
+              ),
+            ],
           ),
-          body: Center(
-            child: InteractiveViewer(
-              child: Image.file(File(path)),
-            ),
+          body: Column(
+            children: [
+              Expanded(
+                child: Center(
+                  child: InteractiveViewer(
+                    child: Image.file(File(photo['path']!)),
+                  ),
+                ),
+              ),
+              if (photo['caption']!.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  color: Colors.black.withOpacity(0.7),
+                  child: Text(
+                    photo['caption']!,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+            ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _reorderPhotos() {
+    showDialog(
+      context: context,
+      builder: (context) => _PhotoReorderDialog(
+        photos: _photosWithCaptions,
+        onReorder: (newOrder) {
+          setState(() {
+            _photosWithCaptions = newOrder;
+          });
+          _saveDataSilently();
+        },
       ),
     );
   }
@@ -233,6 +372,139 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
       _rating = rating;
     });
     _saveDataSilently();
+  }
+
+  void _addDailyEntry() {
+    final textController = TextEditingController();
+    DateTime selectedDate = DateTime.now();
+    
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Daily Journal Entry'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.calendar_today, size: 16, color: Color(0xFF5B7C99)),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(1900),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) {
+                          setDialogState(() {
+                            selectedDate = picked;
+                          });
+                        }
+                      },
+                      child: Text(
+                        '${selectedDate.month}/${selectedDate.day}/${selectedDate.year}',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: textController,
+                  decoration: const InputDecoration(
+                    hintText: 'What happened today? Any funny stories or memorable moments?',
+                    border: OutlineInputBorder(),
+                  ),
+                  maxLines: 6,
+                  autofocus: true,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel', style: TextStyle(color: Colors.grey[600])),
+            ),
+            TextButton(
+              onPressed: () {
+                if (textController.text.trim().isNotEmpty) {
+                  setState(() {
+                    _dailyEntries.add({
+                      'date': selectedDate.toIso8601String().split('T')[0],
+                      'text': textController.text.trim(),
+                    });
+                    _dailyEntries.sort((a, b) => b['date']!.compareTo(a['date']!));
+                  });
+                  _saveDataSilently();
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _editDailyEntry(int index) {
+    final entry = _dailyEntries[index];
+    final textController = TextEditingController(text: entry['text']);
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Edit Entry - ${_formatDate(entry['date']!)}'),
+        content: TextField(
+          controller: textController,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+          ),
+          maxLines: 6,
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel', style: TextStyle(color: Colors.grey[600])),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _dailyEntries.removeAt(index);
+              });
+              _saveDataSilently();
+              Navigator.pop(context);
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+          TextButton(
+            onPressed: () {
+              if (textController.text.trim().isNotEmpty) {
+                setState(() {
+                  _dailyEntries[index]['text'] = textController.text.trim();
+                });
+                _saveDataSilently();
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(String isoDate) {
+    final date = DateTime.parse(isoDate);
+    return '${date.month}/${date.day}/${date.year}';
   }
 
   String _getContinent() {
@@ -289,6 +561,7 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
       body: SingleChildScrollView(
         child: Column(
           children: [
+            // Header
             Container(
               width: double.infinity,
               decoration: BoxDecoration(
@@ -348,6 +621,7 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
               ),
             ),
 
+            // Quick Stats
             Container(
               padding: const EdgeInsets.all(16),
               child: SingleChildScrollView(
@@ -386,86 +660,172 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Daily Journal Section
                   _SectionHeader(
-                    icon: Icons.article_rounded,
-                    title: 'Journal Entry',
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.04),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: TextField(
-                      controller: _journalController,
-                      maxLines: 10,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        height: 1.6,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'What was your favorite moment in ${widget.countryName}?',
-                        hintStyle: TextStyle(
-                          color: Colors.grey[400],
-                          fontSize: 14,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide.none,
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF5B7C99),
-                            width: 2,
-                          ),
-                        ),
-                        contentPadding: const EdgeInsets.all(20),
-                        filled: true,
-                        fillColor: Colors.white,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(Icons.auto_awesome, size: 14, color: Colors.grey[500]),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Auto-saves as you type',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[500],
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 32),
-
-                  _SectionHeader(
-                    icon: Icons.photo_library_rounded,
-                    title: 'Photos',
+                    icon: Icons.book_rounded,
+                    title: 'Daily Journal',
                     action: TextButton.icon(
-                      onPressed: _addPhoto,
-                      icon: const Icon(Icons.add_photo_alternate_rounded, size: 18),
-                      label: const Text('Add Photo'),
+                      onPressed: _addDailyEntry,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Add Entry'),
                       style: TextButton.styleFrom(
                         foregroundColor: const Color(0xFF5B7C99),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       ),
                     ),
                   ),
                   const SizedBox(height: 12),
                   
-                  if (_photos.isEmpty)
+                  if (_dailyEntries.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(32),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey[200]!),
+                      ),
+                      child: Center(
+                        child: Column(
+                          children: [
+                            Icon(Icons.edit_note, size: 40, color: Colors.grey[300]),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No daily entries yet',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[500],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    ..._dailyEntries.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final dailyEntry = entry.value;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.04),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  _formatDate(dailyEntry['date']!),
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF5B7C99),
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.edit, size: 18),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () => _editDailyEntry(index),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              dailyEntry['text']!,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[800],
+                                height: 1.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  
+                  const SizedBox(height: 32),
+
+                  // Categories
+                  _SectionHeader(
+                    icon: Icons.category_rounded,
+                    title: 'Categories',
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  _CategoryField(
+                    icon: Icons.star_rounded,
+                    label: 'Must Sees',
+                    hint: 'Top attractions and landmarks...',
+                    controller: _mustSeesController,
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  _CategoryField(
+                    icon: Icons.explore_rounded,
+                    label: 'Hidden Gems',
+                    hint: 'Niche finds and local favorites...',
+                    controller: _hiddenGemsController,
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  _CategoryField(
+                    icon: Icons.restaurant_rounded,
+                    label: 'Restaurants',
+                    hint: 'Best places to eat...',
+                    controller: _restaurantsController,
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  _CategoryField(
+                    icon: Icons.local_bar_rounded,
+                    label: 'Bars & Nightlife',
+                    hint: 'Fun spots to go out...',
+                    controller: _barsController,
+                  ),
+                  
+                  const SizedBox(height: 32),
+
+                  // Photos
+                  _SectionHeader(
+                    icon: Icons.photo_library_rounded,
+                    title: 'Photos',
+                    action: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_photosWithCaptions.length > 1)
+                          TextButton.icon(
+                            onPressed: _reorderPhotos,
+                            icon: const Icon(Icons.swap_vert, size: 18),
+                            label: const Text('Reorder'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF5B7C99),
+                            ),
+                          ),
+                        TextButton.icon(
+                          onPressed: _addPhoto,
+                          icon: const Icon(Icons.add_photo_alternate_rounded, size: 18),
+                          label: const Text('Add Photo'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFF5B7C99),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  if (_photosWithCaptions.isEmpty)
                     Container(
                       padding: const EdgeInsets.all(48),
                       decoration: BoxDecoration(
@@ -508,54 +868,100 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
+                        crossAxisCount: 2,
                         crossAxisSpacing: 12,
                         mainAxisSpacing: 12,
+                        childAspectRatio: 0.85,
                       ),
-                      itemCount: _photos.length,
+                      itemCount: _photosWithCaptions.length,
                       itemBuilder: (context, index) {
+                        final photo = _photosWithCaptions[index];
                         return GestureDetector(
-                          onTap: () => _viewPhoto(_photos[index]),
+                          onTap: () => _viewPhoto(index),
                           child: Container(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(12),
+                              color: Colors.white,
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.1),
-                                  blurRadius: 4,
+                                  color: Colors.black.withOpacity(0.08),
+                                  blurRadius: 8,
                                   offset: const Offset(0, 2),
                                 ),
                               ],
                             ),
-                            child: Stack(
-                              fit: StackFit.expand,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Image.file(
-                                    File(_photos[index]),
-                                    fit: BoxFit.cover,
+                                Expanded(
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: const BorderRadius.vertical(
+                                          top: Radius.circular(12),
+                                        ),
+                                        child: Image.file(
+                                          File(photo['path']!),
+                                          fit: BoxFit.cover,
+                                        ),
+                                      ),
+                                      Positioned(
+                                        top: 8,
+                                        right: 8,
+                                        child: Row(
+                                          children: [
+                                            GestureDetector(
+                                              onTap: () => _editPhotoCaption(index),
+                                              child: Container(
+                                                padding: const EdgeInsets.all(6),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black.withOpacity(0.6),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(
+                                                  Icons.edit,
+                                                  size: 16,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            GestureDetector(
+                                              onTap: () => _removePhoto(index),
+                                              child: Container(
+                                                padding: const EdgeInsets.all(6),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black.withOpacity(0.6),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(
+                                                  Icons.close,
+                                                  size: 16,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                Positioned(
-                                  top: 6,
-                                  right: 6,
-                                  child: GestureDetector(
-                                    onTap: () => _removePhoto(index),
-                                    child: Container(
-                                      padding: const EdgeInsets.all(6),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black.withOpacity(0.6),
-                                        shape: BoxShape.circle,
+                                if (photo['caption']!.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: Text(
+                                      photo['caption']!,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF2C3E50),
+                                        height: 1.4,
                                       ),
-                                      child: const Icon(
-                                        Icons.close,
-                                        size: 16,
-                                        color: Colors.white,
-                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                ),
                               ],
                             ),
                           ),
@@ -696,6 +1102,175 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
           );
         },
       ),
+    );
+  }
+}
+
+class _CategoryField extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String hint;
+  final TextEditingController controller;
+
+  const _CategoryField({
+    required this.icon,
+    required this.label,
+    required this.hint,
+    required this.controller,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Row(
+              children: [
+                Icon(icon, size: 20, color: const Color(0xFF5B7C99)),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF2C3E50),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          TextField(
+            controller: controller,
+            maxLines: 4,
+            style: const TextStyle(fontSize: 14, height: 1.5),
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: TextStyle(
+                color: Colors.grey[400],
+                fontSize: 13,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: const EdgeInsets.all(16),
+              filled: true,
+              fillColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PhotoReorderDialog extends StatefulWidget {
+  final List<Map<String, String>> photos;
+  final Function(List<Map<String, String>>) onReorder;
+
+  const _PhotoReorderDialog({
+    required this.photos,
+    required this.onReorder,
+  });
+
+  @override
+  State<_PhotoReorderDialog> createState() => _PhotoReorderDialogState();
+}
+
+class _PhotoReorderDialogState extends State<_PhotoReorderDialog> {
+  late List<Map<String, String>> _photos;
+
+  @override
+  void initState() {
+    super.initState();
+    _photos = List.from(widget.photos);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Reorder Photos'),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 400,
+        child: ReorderableListView.builder(
+          itemCount: _photos.length,
+          onReorder: (oldIndex, newIndex) {
+            setState(() {
+              if (newIndex > oldIndex) {
+                newIndex -= 1;
+              }
+              final item = _photos.removeAt(oldIndex);
+              _photos.insert(newIndex, item);
+            });
+          },
+          itemBuilder: (context, index) {
+            final photo = _photos[index];
+            return Container(
+              key: ValueKey(photo['path']),
+              margin: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.drag_handle, color: Colors.grey),
+                  const SizedBox(width: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.file(
+                      File(photo['path']!),
+                      width: 60,
+                      height: 60,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      photo['caption']!.isEmpty
+                          ? 'No caption'
+                          : photo['caption']!,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: photo['caption']!.isEmpty
+                            ? Colors.grey
+                            : Colors.black87,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('Cancel', style: TextStyle(color: Colors.grey[600])),
+        ),
+        TextButton(
+          onPressed: () {
+            widget.onReorder(_photos);
+            Navigator.pop(context);
+          },
+          child: const Text('Save Order'),
+        ),
+      ],
     );
   }
 }
