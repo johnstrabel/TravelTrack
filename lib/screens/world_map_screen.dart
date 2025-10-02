@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/gestures.dart';
@@ -27,6 +28,8 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
   static const _flashDuration = Duration(milliseconds: 450);
 
   late final Box<dynamic> _visitedBox;
+  Box<dynamic>? _profileBox;
+  String? _profilePicturePath;
   CountryPolygons? _countryPolygons;
   bool _loadingPolygons = true;
   bool _isSelectMode = false;
@@ -66,6 +69,7 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
       }
     }
     _loadPolygons();
+    _loadProfilePicture();
   }
 
   @override
@@ -101,6 +105,14 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
       if (!mounted) return;
       setState(() => _loadingPolygons = false);
     }
+  }
+
+  Future<void> _loadProfilePicture() async {
+    _profileBox = await Hive.openBox('profile_data');
+    if (!mounted) return;
+    setState(() {
+      _profilePicturePath = _profileBox!.get('profilePicture') as String?;
+    });
   }
 
   Set<String> _readVisited(Box<dynamic> box) {
@@ -246,31 +258,46 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
         title: Row(
           children: [
             GestureDetector(
-              onTap: () {
-                Navigator.of(context).push(
+              onTap: () async {
+                await Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => const ProfileScreen(),
                   ),
                 );
+                // Reload profile picture when returning from profile
+                _loadProfilePicture();
               },
               child: Container(
-                width: 32,
-                height: 32,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF5B7C99),
                   shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white,
+                    width: 2,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 4,
+                      color: Colors.black.withOpacity(0.15),
+                      blurRadius: 6,
                       offset: const Offset(0, 2),
                     ),
                   ],
                 ),
-                child: const Icon(
-                  Icons.person,
-                  color: Colors.white,
-                  size: 20,
+                child: ClipOval(
+                  child: Container(
+                    color: const Color(0xFF5B7C99),
+                    child: _profilePicturePath != null
+                        ? Image.file(
+                            File(_profilePicturePath!),
+                            fit: BoxFit.cover,
+                          )
+                        : const Icon(
+                            Icons.person,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                  ),
                 ),
               ),
             ),
