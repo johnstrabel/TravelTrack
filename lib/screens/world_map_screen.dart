@@ -286,7 +286,7 @@ class _FooterStats extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final continents = CountriesData.continents;
-    final grouped = CountriesData.byContinent();
+    final grouped = CountriesData.byContinent;
 
     final totalVisited = visitedCodes.length;
     final grandTotal = CountriesData.totalCount;
@@ -294,15 +294,14 @@ class _FooterStats extends StatelessWidget {
 
     final cards = <Widget>[];
     for (final continent in continents) {
-      final countries = grouped[continent] ?? <dynamic>[];
+      final countries = grouped[continent] ?? <Country>[];
       final total = countries.length;
-      final visited = countries
-          .where((country) => visitedCodes.contains(country.code))
-          .length;
+      final visitedInContinent =
+          countries.where((c) => visitedCodes.contains(c.code)).length;
       cards.add(
         _ContinentCard(
           label: continent,
-          visited: visited,
+          visited: visitedInContinent,
           total: total,
         ),
       );

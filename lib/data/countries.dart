@@ -60,7 +60,7 @@ class CountriesData {
     Country(name: 'Zambia', code: 'ZM', continent: 'Africa'),
     Country(name: 'Zimbabwe', code: 'ZW', continent: 'Africa'),
 
-    // Asia (48 countries)
+    // Asia (49 countries)
     Country(name: 'Afghanistan', code: 'AF', continent: 'Asia'),
     Country(name: 'Armenia', code: 'AM', continent: 'Asia'),
     Country(name: 'Azerbaijan', code: 'AZ', continent: 'Asia'),
@@ -95,6 +95,7 @@ class CountriesData {
     Country(name: 'Palestine', code: 'PS', continent: 'Asia'),
     Country(name: 'Philippines', code: 'PH', continent: 'Asia'),
     Country(name: 'Qatar', code: 'QA', continent: 'Asia'),
+    Country(name: 'Russia', code: 'RU', continent: 'Asia'),
     Country(name: 'Saudi Arabia', code: 'SA', continent: 'Asia'),
     Country(name: 'Singapore', code: 'SG', continent: 'Asia'),
     Country(name: 'South Korea', code: 'KR', continent: 'Asia'),
@@ -146,7 +147,6 @@ class CountriesData {
     Country(name: 'Poland', code: 'PL', continent: 'Europe'),
     Country(name: 'Portugal', code: 'PT', continent: 'Europe'),
     Country(name: 'Romania', code: 'RO', continent: 'Europe'),
-    Country(name: 'Russia', code: 'RU', continent: 'Europe'),
     Country(name: 'San Marino', code: 'SM', continent: 'Europe'),
     Country(name: 'Serbia', code: 'RS', continent: 'Europe'),
     Country(name: 'Slovakia', code: 'SK', continent: 'Europe'),
@@ -243,7 +243,9 @@ class CountriesData {
   /// Find country by code
   static Country? findByCode(String code) {
     try {
-      return allCountries.firstWhere((c) => c.code == code);
+      return allCountries.firstWhere(
+        (c) => c.code.toUpperCase() == code.toUpperCase(),
+      );
     } catch (e) {
       return null;
     }
