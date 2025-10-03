@@ -36,6 +36,9 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
   late AnimationController _fabAnimationController;
   late AnimationController _percentageController;
   late Animation<double> _percentageAnimation;
+  
+  // NEW: Continent filter state
+  String? _selectedContinent;
 
   final MapController _mapController = MapController();
   String? _hoverCode;
@@ -264,7 +267,6 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
                     builder: (_) => const ProfileScreen(),
                   ),
                 );
-                // Reload profile picture when returning from profile
                 _loadProfilePicture();
               },
               child: Container(
@@ -403,6 +405,16 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
                   return _GlassmorphicFooter(
                     visitedCodes: visited,
                     percentageAnimation: _percentageAnimation,
+                    selectedContinent: _selectedContinent,
+                    onContinentTap: (continent) {
+                      setState(() {
+                        if (_selectedContinent == continent) {
+                          _selectedContinent = null; // Clear filter
+                        } else {
+                          _selectedContinent = continent; // Set filter
+                        }
+                      });
+                    },
                   );
                 },
               ),
@@ -425,17 +437,33 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
       final isVisited = visited.contains(code);
       final isHover = _hoverCode == code && !isVisited;
 
-      final fillColor = isVisited
-          ? const Color(0xFF5B7C99)
-          : isHover
-              ? const Color(0xFF5B7C99).withOpacity(0.4)
-              : const Color(0xFFEDE9E3);
-      
-      final borderColor = isVisited
-          ? const Color(0xFF4A6B7F)
-          : isHover
-              ? const Color(0xFF5B7C99)
-              : const Color(0xFFD5CDC1);
+      // NEW: Get country's continent and check filter
+      final country = CountriesData.findByCode(code);
+      final countryContinent = country?.continent;
+      final isFiltered = _selectedContinent != null && 
+                         countryContinent != _selectedContinent;
+
+      Color fillColor;
+      Color borderColor;
+
+      if (isFiltered) {
+        // Fade out countries not in selected continent
+        fillColor = const Color(0xFFF5F5F5).withOpacity(0.3);
+        borderColor = const Color(0xFFE0E0E0).withOpacity(0.3);
+      } else {
+        // Normal colors for selected continent (or when no filter)
+        fillColor = isVisited
+            ? const Color(0xFF5B7C99)
+            : isHover
+                ? const Color(0xFF5B7C99).withOpacity(0.4)
+                : const Color(0xFFEDE9E3);
+        
+        borderColor = isVisited
+            ? const Color(0xFF4A6B7F)
+            : isHover
+                ? const Color(0xFF5B7C99)
+                : const Color(0xFFD5CDC1);
+      }
 
       for (final polygon in entry.value) {
         flutterPolygons.add(
@@ -544,10 +572,14 @@ class _GlassmorphicFooter extends StatelessWidget {
   const _GlassmorphicFooter({
     required this.visitedCodes,
     required this.percentageAnimation,
+    required this.selectedContinent,
+    required this.onContinentTap,
   });
 
   final Set<String> visitedCodes;
   final Animation<double> percentageAnimation;
+  final String? selectedContinent;
+  final Function(String) onContinentTap;
 
   static const _continentColors = {
     'Africa': Color(0xFFFFF8F0),
@@ -634,6 +666,8 @@ class _GlassmorphicFooter extends StatelessWidget {
                       visited: visitedInContinent,
                       total: total,
                       color: _continentColors[continent] ?? Colors.white,
+                      isSelected: selectedContinent == continent,
+                      onTap: () => onContinentTap(continent),
                     );
                   }).toList(),
                 ),
@@ -652,45 +686,55 @@ class _ContinentChip extends StatelessWidget {
     required this.visited,
     required this.total,
     required this.color,
+    required this.isSelected,
+    required this.onTap,
   });
 
   final String label;
   final int visited;
   final int total;
   final Color color;
+  final bool isSelected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final pct = total == 0 ? 0.0 : visited / total;
     
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade300, width: 0.5),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF2C3E50),
-            ),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF5B7C99) : color,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF5B7C99) : Colors.grey.shade300,
+            width: 0.5,
           ),
-          const SizedBox(width: 6),
-          Text(
-            '${(pct * 100).toStringAsFixed(0)}%',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: Colors.grey.shade600,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isSelected ? Colors.white : const Color(0xFF2C3E50),
+              ),
             ),
-          ),
-        ],
+            const SizedBox(width: 6),
+            Text(
+              '${(pct * 100).toStringAsFixed(0)}%',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: isSelected ? Colors.white70 : Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

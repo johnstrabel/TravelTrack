@@ -45,5 +45,11 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>To save and view your travel photos</string>
+	<key>NSCameraUsageDescription</key>
+	<string>To take photos of your travels</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>To save travel photos to your library</string>
 </dict>
 </plist>
