@@ -17,6 +17,7 @@ dependencies:
   latlong2: ^0.9.1
   http: ^1.2.1
   file_picker: ^8.0.0
+  path_provider_foundation: ^2.4.0
 
 dev_dependencies:
   flutter_test:

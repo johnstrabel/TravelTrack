@@ -20,39 +20,79 @@ class CountryDetailScreen extends StatefulWidget {
 
 class _CountryDetailScreenState extends State<CountryDetailScreen> {
   late final Box<dynamic> _dataBox;
-  
+
   // Category controllers
   final TextEditingController _mustSeesController = TextEditingController();
   final TextEditingController _hiddenGemsController = TextEditingController();
   final TextEditingController _restaurantsController = TextEditingController();
   final TextEditingController _barsController = TextEditingController();
-  
+
   final TextEditingController _cityController = TextEditingController();
-  
+
   // Photos with captions
   List<Map<String, String>> _photosWithCaptions = [];
-  
+
   List<String> _cities = [];
   int _rating = 0;
   DateTime? _visitedDate;
-  
+
   // Daily journal entries: [{date: "2025-01-15", text: "..."}]
   List<Map<String, String>> _dailyEntries = [];
-  
+
   bool _isLoading = true;
   Timer? _autoSaveTimer;
 
   static const Map<String, String> _flagEmojis = {
-    'US': '🇺🇸', 'CA': '🇨🇦', 'MX': '🇲🇽', 'BR': '🇧🇷', 'AR': '🇦🇷',
-    'GB': '🇬🇧', 'FR': '🇫🇷', 'DE': '🇩🇪', 'IT': '🇮🇹', 'ES': '🇪🇸',
-    'CN': '🇨🇳', 'JP': '🇯🇵', 'IN': '🇮🇳', 'AU': '🇦🇺', 'RU': '🇷🇺',
-    'ZA': '🇿🇦', 'EG': '🇪🇬', 'NG': '🇳🇬', 'KE': '🇰🇪', 'MA': '🇲🇦',
-    'CZ': '🇨🇿', 'PL': '🇵🇱', 'NL': '🇳🇱', 'SE': '🇸🇪', 'NO': '🇳🇴',
-    'DK': '🇩🇰', 'FI': '🇫🇮', 'PT': '🇵🇹', 'GR': '🇬🇷', 'TR': '🇹🇷',
-    'TH': '🇹🇭', 'VN': '🇻🇳', 'ID': '🇮🇩', 'MY': '🇲🇾', 'SG': '🇸🇬',
-    'PH': '🇵🇭', 'KR': '🇰🇷', 'NZ': '🇳🇿', 'CL': '🇨🇱', 'CO': '🇨🇴',
-    'PE': '🇵🇪', 'VE': '🇻🇪', 'UA': '🇺🇦', 'RO': '🇷🇴', 'HU': '🇭🇺',
-    'AT': '🇦🇹', 'CH': '🇨🇭', 'BE': '🇧🇪', 'IE': '🇮🇪', 'CR': '🇨🇷',
+    'US': '🇺🇸',
+    'CA': '🇨🇦',
+    'MX': '🇲🇽',
+    'BR': '🇧🇷',
+    'AR': '🇦🇷',
+    'GB': '🇬🇧',
+    'FR': '🇫🇷',
+    'DE': '🇩🇪',
+    'IT': '🇮🇹',
+    'ES': '🇪🇸',
+    'CN': '🇨🇳',
+    'JP': '🇯🇵',
+    'IN': '🇮🇳',
+    'AU': '🇦🇺',
+    'RU': '🇷🇺',
+    'ZA': '🇿🇦',
+    'EG': '🇪🇬',
+    'NG': '🇳🇬',
+    'KE': '🇰🇪',
+    'MA': '🇲🇦',
+    'CZ': '🇨🇿',
+    'PL': '🇵🇱',
+    'NL': '🇳🇱',
+    'SE': '🇸🇪',
+    'NO': '🇳🇴',
+    'DK': '🇩🇰',
+    'FI': '🇫🇮',
+    'PT': '🇵🇹',
+    'GR': '🇬🇷',
+    'TR': '🇹🇷',
+    'TH': '🇹🇭',
+    'VN': '🇻🇳',
+    'ID': '🇮🇩',
+    'MY': '🇲🇾',
+    'SG': '🇸🇬',
+    'PH': '🇵🇭',
+    'KR': '🇰🇷',
+    'NZ': '🇳🇿',
+    'CL': '🇨🇱',
+    'CO': '🇨🇴',
+    'PE': '🇵🇪',
+    'VE': '🇻🇪',
+    'UA': '🇺🇦',
+    'RO': '🇷🇴',
+    'HU': '🇭🇺',
+    'AT': '🇦🇹',
+    'CH': '🇨🇭',
+    'BE': '🇧🇪',
+    'IE': '🇮🇪',
+    'CR': '🇨🇷',
   };
 
   static const Map<String, Color> _continentColors = {
@@ -95,13 +135,13 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
   Future<void> _loadData() async {
     _dataBox = await Hive.openBox('country_data');
     final countryData = _dataBox.get(widget.countryCode) as Map?;
-    
+
     if (countryData != null) {
       _mustSeesController.text = countryData['mustSees'] as String? ?? '';
       _hiddenGemsController.text = countryData['hiddenGems'] as String? ?? '';
       _restaurantsController.text = countryData['restaurants'] as String? ?? '';
       _barsController.text = countryData['bars'] as String? ?? '';
-      
+
       // Load photos with captions
       final photosList = countryData['photos'] as List?;
       if (photosList != null) {
@@ -118,36 +158,39 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
           return {'path': '', 'caption': ''};
         }).toList();
       }
-      
+
       _cities = List<String>.from(countryData['cities'] as List? ?? []);
       _rating = countryData['rating'] as int? ?? 0;
-      
+
       final dateString = countryData['visitedDate'] as String?;
       if (dateString != null) {
         _visitedDate = DateTime.tryParse(dateString);
       }
-      
+
       // Load daily entries
       final entriesList = countryData['dailyEntries'] as List?;
       if (entriesList != null) {
-        _dailyEntries = entriesList.map((item) {
-          if (item is Map) {
-            return {
-              'date': item['date'] as String? ?? '',
-              'text': item['text'] as String? ?? '',
-            };
-          }
-          return {'date': '', 'text': ''};
-        }).where((e) => e['date']!.isNotEmpty).toList();
+        _dailyEntries = entriesList
+            .map((item) {
+              if (item is Map) {
+                return {
+                  'date': item['date'] as String? ?? '',
+                  'text': item['text'] as String? ?? '',
+                };
+              }
+              return {'date': '', 'text': ''};
+            })
+            .where((e) => e['date']!.isNotEmpty)
+            .toList();
       }
     }
-    
+
     setState(() => _isLoading = false);
   }
 
   Future<void> _saveData() async {
     await _saveDataSilently();
-    
+
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -177,7 +220,7 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
       'visitedDate': _visitedDate?.toIso8601String(),
       'dailyEntries': _dailyEntries,
     };
-    
+
     await _dataBox.put(widget.countryCode, data);
   }
 
@@ -213,7 +256,7 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
     final captionController = TextEditingController(
       text: _photosWithCaptions[index]['caption'],
     );
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -312,10 +355,7 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
                   color: Colors.black.withOpacity(0.7),
                   child: Text(
                     photo['caption']!,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -350,9 +390,7 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF5B7C99),
-            ),
+            colorScheme: const ColorScheme.light(primary: Color(0xFF5B7C99)),
           ),
           child: child!,
         );
@@ -377,7 +415,7 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
   void _addDailyEntry() {
     final textController = TextEditingController();
     DateTime selectedDate = DateTime.now();
-    
+
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -391,7 +429,11 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.calendar_today, size: 16, color: Color(0xFF5B7C99)),
+                    const Icon(
+                      Icons.calendar_today,
+                      size: 16,
+                      color: Color(0xFF5B7C99),
+                    ),
                     const SizedBox(width: 8),
                     TextButton(
                       onPressed: () async {
@@ -418,7 +460,8 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
                 TextField(
                   controller: textController,
                   decoration: const InputDecoration(
-                    hintText: 'What happened today? Any funny stories or memorable moments?',
+                    hintText:
+                        'What happened today? Any funny stories or memorable moments?',
                     border: OutlineInputBorder(),
                   ),
                   maxLines: 6,
@@ -440,7 +483,9 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
                       'date': selectedDate.toIso8601String().split('T')[0],
                       'text': textController.text.trim(),
                     });
-                    _dailyEntries.sort((a, b) => b['date']!.compareTo(a['date']!));
+                    _dailyEntries.sort(
+                      (a, b) => b['date']!.compareTo(a['date']!),
+                    );
                   });
                   _saveDataSilently();
                   Navigator.pop(context);
@@ -457,16 +502,14 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
   void _editDailyEntry(int index) {
     final entry = _dailyEntries[index];
     final textController = TextEditingController(text: entry['text']);
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Edit Entry - ${_formatDate(entry['date']!)}'),
         content: TextField(
           controller: textController,
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-          ),
+          decoration: const InputDecoration(border: OutlineInputBorder()),
           maxLines: 6,
           autofocus: true,
         ),
@@ -509,15 +552,203 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
 
   String _getContinent() {
     final code = widget.countryCode;
-    if (['DZ', 'AO', 'BJ', 'BW', 'BF', 'BI', 'CM', 'CV', 'CF', 'TD', 'KM', 'CG', 'CD', 'DJ', 'EG', 'GQ', 'ER', 'SZ', 'ET', 'GA', 'GM', 'GH', 'GN', 'GW', 'CI', 'KE', 'LS', 'LR', 'LY', 'MG', 'MW', 'ML', 'MR', 'MU', 'MA', 'MZ', 'NA', 'NE', 'NG', 'RW', 'ST', 'SN', 'SC', 'SL', 'SO', 'ZA', 'SS', 'SD', 'TZ', 'TG', 'TN', 'UG', 'ZM', 'ZW'].contains(code)) {
+    if ([
+      'DZ',
+      'AO',
+      'BJ',
+      'BW',
+      'BF',
+      'BI',
+      'CM',
+      'CV',
+      'CF',
+      'TD',
+      'KM',
+      'CG',
+      'CD',
+      'DJ',
+      'EG',
+      'GQ',
+      'ER',
+      'SZ',
+      'ET',
+      'GA',
+      'GM',
+      'GH',
+      'GN',
+      'GW',
+      'CI',
+      'KE',
+      'LS',
+      'LR',
+      'LY',
+      'MG',
+      'MW',
+      'ML',
+      'MR',
+      'MU',
+      'MA',
+      'MZ',
+      'NA',
+      'NE',
+      'NG',
+      'RW',
+      'ST',
+      'SN',
+      'SC',
+      'SL',
+      'SO',
+      'ZA',
+      'SS',
+      'SD',
+      'TZ',
+      'TG',
+      'TN',
+      'UG',
+      'ZM',
+      'ZW',
+    ].contains(code)) {
       return 'Africa';
-    } else if (['AF', 'AM', 'AZ', 'BH', 'BD', 'BT', 'BN', 'KH', 'CN', 'CY', 'GE', 'IN', 'ID', 'IR', 'IQ', 'IL', 'JP', 'JO', 'KZ', 'KW', 'KG', 'LA', 'LB', 'MY', 'MV', 'MN', 'MM', 'NP', 'KP', 'OM', 'PK', 'PS', 'PH', 'QA', 'RU', 'SA', 'SG', 'KR', 'LK', 'SY', 'TW', 'TJ', 'TH', 'TL', 'TR', 'TM', 'AE', 'UZ', 'VN', 'YE'].contains(code)) {
+    } else if ([
+      'AF',
+      'AM',
+      'AZ',
+      'BH',
+      'BD',
+      'BT',
+      'BN',
+      'KH',
+      'CN',
+      'CY',
+      'GE',
+      'IN',
+      'ID',
+      'IR',
+      'IQ',
+      'IL',
+      'JP',
+      'JO',
+      'KZ',
+      'KW',
+      'KG',
+      'LA',
+      'LB',
+      'MY',
+      'MV',
+      'MN',
+      'MM',
+      'NP',
+      'KP',
+      'OM',
+      'PK',
+      'PS',
+      'PH',
+      'QA',
+      'RU',
+      'SA',
+      'SG',
+      'KR',
+      'LK',
+      'SY',
+      'TW',
+      'TJ',
+      'TH',
+      'TL',
+      'TR',
+      'TM',
+      'AE',
+      'UZ',
+      'VN',
+      'YE',
+    ].contains(code)) {
       return 'Asia';
-    } else if (['AL', 'AD', 'AT', 'BY', 'BE', 'BA', 'BG', 'HR', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IS', 'IE', 'IT', 'XK', 'LV', 'LI', 'LT', 'LU', 'MT', 'MD', 'MC', 'ME', 'NL', 'MK', 'NO', 'PL', 'PT', 'RO', 'SM', 'RS', 'SK', 'SI', 'ES', 'SE', 'CH', 'UA', 'GB', 'VA'].contains(code)) {
+    } else if ([
+      'AL',
+      'AD',
+      'AT',
+      'BY',
+      'BE',
+      'BA',
+      'BG',
+      'HR',
+      'CZ',
+      'DK',
+      'EE',
+      'FI',
+      'FR',
+      'DE',
+      'GR',
+      'HU',
+      'IS',
+      'IE',
+      'IT',
+      'XK',
+      'LV',
+      'LI',
+      'LT',
+      'LU',
+      'MT',
+      'MD',
+      'MC',
+      'ME',
+      'NL',
+      'MK',
+      'NO',
+      'PL',
+      'PT',
+      'RO',
+      'SM',
+      'RS',
+      'SK',
+      'SI',
+      'ES',
+      'SE',
+      'CH',
+      'UA',
+      'GB',
+      'VA',
+    ].contains(code)) {
       return 'Europe';
-    } else if (['AG', 'BS', 'BB', 'BZ', 'CA', 'CR', 'CU', 'DM', 'DO', 'SV', 'GD', 'GT', 'HT', 'HN', 'JM', 'MX', 'NI', 'PA', 'KN', 'LC', 'VC', 'TT', 'US'].contains(code)) {
+    } else if ([
+      'AG',
+      'BS',
+      'BB',
+      'BZ',
+      'CA',
+      'CR',
+      'CU',
+      'DM',
+      'DO',
+      'SV',
+      'GD',
+      'GT',
+      'HT',
+      'HN',
+      'JM',
+      'MX',
+      'NI',
+      'PA',
+      'KN',
+      'LC',
+      'VC',
+      'TT',
+      'US',
+    ].contains(code)) {
       return 'North America';
-    } else if (['AR', 'BO', 'BR', 'CL', 'CO', 'EC', 'GY', 'PY', 'PE', 'SR', 'UY', 'VE'].contains(code)) {
+    } else if ([
+      'AR',
+      'BO',
+      'BR',
+      'CL',
+      'CO',
+      'EC',
+      'GY',
+      'PY',
+      'PE',
+      'SR',
+      'UY',
+      'VE',
+    ].contains(code)) {
       return 'South America';
     } else {
       return 'Oceania';
@@ -533,9 +764,7 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
           backgroundColor: const Color(0xFF5B7C99),
         ),
         body: const Center(
-          child: CircularProgressIndicator(
-            color: Color(0xFF5B7C99),
-          ),
+          child: CircularProgressIndicator(color: Color(0xFF5B7C99)),
         ),
       );
     }
@@ -567,10 +796,7 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
               decoration: BoxDecoration(
                 color: headerColor,
                 border: Border(
-                  bottom: BorderSide(
-                    color: Colors.grey.shade200,
-                    width: 1,
-                  ),
+                  bottom: BorderSide(color: Colors.grey.shade200, width: 1),
                 ),
               ),
               padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
@@ -591,10 +817,7 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
                       ],
                     ),
                     child: Center(
-                      child: Text(
-                        flag,
-                        style: const TextStyle(fontSize: 48),
-                      ),
+                      child: Text(flag, style: const TextStyle(fontSize: 48)),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -674,7 +897,7 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  
+
                   if (_dailyEntries.isEmpty)
                     Container(
                       padding: const EdgeInsets.all(32),
@@ -686,7 +909,11 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
                       child: Center(
                         child: Column(
                           children: [
-                            Icon(Icons.edit_note, size: 40, color: Colors.grey[300]),
+                            Icon(
+                              Icons.edit_note,
+                              size: 40,
+                              color: Colors.grey[300],
+                            ),
                             const SizedBox(height: 12),
                             Text(
                               'No daily entries yet',
@@ -753,7 +980,7 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
                         ),
                       );
                     }),
-                  
+
                   const SizedBox(height: 32),
 
                   // Categories
@@ -762,7 +989,7 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
                     title: 'Categories',
                   ),
                   const SizedBox(height: 12),
-                  
+
                   _CategoryField(
                     icon: Icons.star_rounded,
                     label: 'Must Sees',
@@ -770,7 +997,7 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
                     controller: _mustSeesController,
                   ),
                   const SizedBox(height: 12),
-                  
+
                   _CategoryField(
                     icon: Icons.explore_rounded,
                     label: 'Hidden Gems',
@@ -778,7 +1005,7 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
                     controller: _hiddenGemsController,
                   ),
                   const SizedBox(height: 12),
-                  
+
                   _CategoryField(
                     icon: Icons.restaurant_rounded,
                     label: 'Restaurants',
@@ -786,14 +1013,14 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
                     controller: _restaurantsController,
                   ),
                   const SizedBox(height: 12),
-                  
+
                   _CategoryField(
                     icon: Icons.local_bar_rounded,
                     label: 'Bars & Nightlife',
                     hint: 'Fun spots to go out...',
                     controller: _barsController,
                   ),
-                  
+
                   const SizedBox(height: 32),
 
                   // Photos
@@ -814,7 +1041,10 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
                           ),
                         TextButton.icon(
                           onPressed: _addPhoto,
-                          icon: const Icon(Icons.add_photo_alternate_rounded, size: 18),
+                          icon: const Icon(
+                            Icons.add_photo_alternate_rounded,
+                            size: 18,
+                          ),
                           label: const Text('Add Photo'),
                           style: TextButton.styleFrom(
                             foregroundColor: const Color(0xFF5B7C99),
@@ -824,7 +1054,7 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  
+
                   if (_photosWithCaptions.isEmpty)
                     Container(
                       padding: const EdgeInsets.all(48),
@@ -867,12 +1097,13 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
                     GridView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                        childAspectRatio: 0.85,
-                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                            childAspectRatio: 0.85,
+                          ),
                       itemCount: _photosWithCaptions.length,
                       itemBuilder: (context, index) {
                         final photo = _photosWithCaptions[index];
@@ -898,9 +1129,10 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
                                     fit: StackFit.expand,
                                     children: [
                                       ClipRRect(
-                                        borderRadius: const BorderRadius.vertical(
-                                          top: Radius.circular(12),
-                                        ),
+                                        borderRadius:
+                                            const BorderRadius.vertical(
+                                              top: Radius.circular(12),
+                                            ),
                                         child: Image.file(
                                           File(photo['path']!),
                                           fit: BoxFit.cover,
@@ -912,11 +1144,15 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
                                         child: Row(
                                           children: [
                                             GestureDetector(
-                                              onTap: () => _editPhotoCaption(index),
+                                              onTap: () =>
+                                                  _editPhotoCaption(index),
                                               child: Container(
-                                                padding: const EdgeInsets.all(6),
+                                                padding: const EdgeInsets.all(
+                                                  6,
+                                                ),
                                                 decoration: BoxDecoration(
-                                                  color: Colors.black.withOpacity(0.6),
+                                                  color: Colors.black
+                                                      .withOpacity(0.6),
                                                   shape: BoxShape.circle,
                                                 ),
                                                 child: const Icon(
@@ -930,9 +1166,12 @@ class _CountryDetailScreenState extends State<CountryDetailScreen> {
                                             GestureDetector(
                                               onTap: () => _removePhoto(index),
                                               child: Container(
-                                                padding: const EdgeInsets.all(6),
+                                                padding: const EdgeInsets.all(
+                                                  6,
+                                                ),
                                                 decoration: BoxDecoration(
-                                                  color: Colors.black.withOpacity(0.6),
+                                                  color: Colors.black
+                                                      .withOpacity(0.6),
                                                   shape: BoxShape.circle,
                                                 ),
                                                 child: const Icon(
@@ -1159,10 +1398,7 @@ class _CategoryField extends StatelessWidget {
             style: const TextStyle(fontSize: 14, height: 1.5),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: TextStyle(
-                color: Colors.grey[400],
-                fontSize: 13,
-              ),
+              hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide.none,
@@ -1182,10 +1418,7 @@ class _PhotoReorderDialog extends StatefulWidget {
   final List<Map<String, String>> photos;
   final Function(List<Map<String, String>>) onReorder;
 
-  const _PhotoReorderDialog({
-    required this.photos,
-    required this.onReorder,
-  });
+  const _PhotoReorderDialog({required this.photos, required this.onReorder});
 
   @override
   State<_PhotoReorderDialog> createState() => _PhotoReorderDialogState();
@@ -1310,11 +1543,7 @@ class _QuickStatCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(
-              icon,
-              size: 24,
-              color: const Color(0xFF5B7C99),
-            ),
+            Icon(icon, size: 24, color: const Color(0xFF5B7C99)),
             const SizedBox(height: 8),
             Text(
               label,
@@ -1346,11 +1575,7 @@ class _SectionHeader extends StatelessWidget {
   final String title;
   final Widget? action;
 
-  const _SectionHeader({
-    required this.icon,
-    required this.title,
-    this.action,
-  });
+  const _SectionHeader({required this.icon, required this.title, this.action});
 
   @override
   Widget build(BuildContext context) {
