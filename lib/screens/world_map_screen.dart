@@ -23,7 +23,8 @@ class WorldMapScreen extends StatefulWidget {
   State<WorldMapScreen> createState() => _WorldMapScreenState();
 }
 
-class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStateMixin {
+class _WorldMapScreenState extends State<WorldMapScreen>
+    with TickerProviderStateMixin {
   static const _visitedKey = 'codes';
   static const _flashDuration = Duration(milliseconds: 450);
 
@@ -36,8 +37,7 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
   late AnimationController _fabAnimationController;
   late AnimationController _percentageController;
   late Animation<double> _percentageAnimation;
-  
-  // NEW: Continent filter state
+
   String? _selectedContinent;
 
   final MapController _mapController = MapController();
@@ -93,16 +93,15 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
         _countryPolygons = polygons;
         _loadingPolygons = false;
       });
-      
+
       final visited = _readVisited(_visitedBox);
       final totalPct = visited.length / CountriesData.totalCount;
-      _percentageAnimation = Tween<double>(
-        begin: 0.0,
-        end: totalPct,
-      ).animate(CurvedAnimation(
-        parent: _percentageController,
-        curve: Curves.easeOutCubic,
-      ));
+      _percentageAnimation = Tween<double>(begin: 0.0, end: totalPct).animate(
+        CurvedAnimation(
+          parent: _percentageController,
+          curve: Curves.easeOutCubic,
+        ),
+      );
       _percentageController.forward();
     } catch (_) {
       if (!mounted) return;
@@ -130,8 +129,7 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
   }
 
   void _writeVisited(Set<String> codes) {
-    final normalised = codes.map((code) => code.toUpperCase()).toList()
-      ..sort();
+    final normalised = codes.map((code) => code.toUpperCase()).toList()..sort();
     _visitedBox.put(_visitedKey, normalised);
   }
 
@@ -143,16 +141,16 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
       visited.add(code);
     }
     _writeVisited(visited);
-    
+
     _percentageController.reset();
     final totalPct = visited.length / CountriesData.totalCount;
-    _percentageAnimation = Tween<double>(
-      begin: _percentageAnimation.value,
-      end: totalPct,
-    ).animate(CurvedAnimation(
-      parent: _percentageController,
-      curve: Curves.easeOutCubic,
-    ));
+    _percentageAnimation =
+        Tween<double>(begin: _percentageAnimation.value, end: totalPct).animate(
+          CurvedAnimation(
+            parent: _percentageController,
+            curve: Curves.easeOutCubic,
+          ),
+        );
     _percentageController.forward();
   }
 
@@ -164,7 +162,7 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
 
     if (_isSelectMode) {
       _triggerFlash(latLng);
-      
+
       final visited = _readVisited(_visitedBox);
       final wasVisited = visited.contains(code);
       if (wasVisited) {
@@ -176,22 +174,23 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
 
       _percentageController.reset();
       final totalPct = visited.length / CountriesData.totalCount;
-      _percentageAnimation = Tween<double>(
-        begin: _percentageAnimation.value,
-        end: totalPct,
-      ).animate(CurvedAnimation(
-        parent: _percentageController,
-        curve: Curves.easeOutCubic,
-      ));
+      _percentageAnimation =
+          Tween<double>(
+            begin: _percentageAnimation.value,
+            end: totalPct,
+          ).animate(
+            CurvedAnimation(
+              parent: _percentageController,
+              curve: Curves.easeOutCubic,
+            ),
+          );
       _percentageController.forward();
 
       final country = CountriesData.findByCode(code);
       if (!mounted || country == null) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            '${country.name} ${wasVisited ? 'removed' : 'added'}',
-          ),
+          content: Text('${country.name} ${wasVisited ? 'removed' : 'added'}'),
           duration: const Duration(milliseconds: 900),
           behavior: SnackBarBehavior.floating,
         ),
@@ -199,13 +198,14 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
     } else {
       final country = CountriesData.findByCode(code);
       if (country == null) return;
-      
+
       Navigator.of(context).push(
         PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => CountryDetailScreen(
-            countryCode: country.code,
-            countryName: country.name,
-          ),
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              CountryDetailScreen(
+                countryCode: country.code,
+                countryName: country.name,
+              ),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
           },
@@ -258,26 +258,23 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
         elevation: 2,
         shadowColor: Colors.black.withOpacity(0.05),
         toolbarHeight: 64,
-        title: Row(
-          children: [
-            GestureDetector(
+        centerTitle: true,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: Center(
+            child: GestureDetector(
               onTap: () async {
                 await Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const ProfileScreen(),
-                  ),
+                  MaterialPageRoute(builder: (_) => const ProfileScreen()),
                 );
                 _loadProfilePicture();
               },
               child: Container(
-                width: 36,
-                height: 36,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.white,
-                    width: 2,
-                  ),
+                  border: Border.all(color: const Color(0xFF5B7C99), width: 2),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.15),
@@ -297,60 +294,46 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
                         : const Icon(
                             Icons.person,
                             color: Colors.white,
-                            size: 20,
+                            size: 22,
                           ),
                   ),
                 ),
               ),
             ),
-            const SizedBox(width: 12),
-            const Text(
-              'Your Map',
-              style: TextStyle(
-                color: Color(0xFF2C3E50),
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.5,
+          ),
+        ),
+        title: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.grey.shade300, width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _ModeButton(
+                label: 'View',
+                icon: Icons.visibility_outlined,
+                isSelected: !_isSelectMode,
+                onTap: () {
+                  if (_isSelectMode) _toggleMode();
+                },
               ),
-            ),
-          ],
+              _ModeButton(
+                label: 'Select',
+                icon: Icons.edit_outlined,
+                isSelected: _isSelectMode,
+                onTap: () {
+                  if (!_isSelectMode) _toggleMode();
+                },
+              ),
+            ],
+          ),
         ),
         actions: [
           Container(
             margin: const EdgeInsets.only(right: 12),
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade200,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: Colors.grey.shade300,
-                width: 1,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _ModeButton(
-                  label: 'View',
-                  icon: Icons.visibility_outlined,
-                  isSelected: !_isSelectMode,
-                  onTap: () {
-                    if (_isSelectMode) _toggleMode();
-                  },
-                ),
-                _ModeButton(
-                  label: 'Select',
-                  icon: Icons.edit_outlined,
-                  isSelected: _isSelectMode,
-                  onTap: () {
-                    if (!_isSelectMode) _toggleMode();
-                  },
-                ),
-              ],
-            ),
-          ),
-          Container(
-            margin: const EdgeInsets.only(right: 8),
             decoration: BoxDecoration(
               color: const Color(0xFF5B7C99),
               borderRadius: BorderRadius.circular(10),
@@ -375,50 +358,44 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
               },
             ),
           ),
-          const SizedBox(width: 8),
         ],
       ),
-      body: Stack(
+      body: Column(
         children: [
-          Column(
-            children: [
-              Expanded(
-                child: _loadingPolygons
-                    ? const Center(
-                        child: CircularProgressIndicator(
-                          color: Color(0xFF5B7C99),
-                        ),
-                      )
-                    : ValueListenableBuilder<Box<dynamic>>(
-                        valueListenable:
-                            _visitedBox.listenable(keys: const [_visitedKey]),
-                        builder: (context, box, _) {
-                          final visited = _readVisited(box);
-                          return _buildMap(visited);
-                        },
-                      ),
-              ),
-              ValueListenableBuilder<Box<dynamic>>(
-                valueListenable: _visitedBox.listenable(keys: const [_visitedKey]),
-                builder: (context, box, _) {
-                  final visited = _readVisited(box);
-                  return _GlassmorphicFooter(
-                    visitedCodes: visited,
-                    percentageAnimation: _percentageAnimation,
-                    selectedContinent: _selectedContinent,
-                    onContinentTap: (continent) {
-                      setState(() {
-                        if (_selectedContinent == continent) {
-                          _selectedContinent = null; // Clear filter
-                        } else {
-                          _selectedContinent = continent; // Set filter
-                        }
-                      });
+          Expanded(
+            child: _loadingPolygons
+                ? const Center(
+                    child: CircularProgressIndicator(color: Color(0xFF5B7C99)),
+                  )
+                : ValueListenableBuilder<Box<dynamic>>(
+                    valueListenable: _visitedBox.listenable(
+                      keys: const [_visitedKey],
+                    ),
+                    builder: (context, box, _) {
+                      final visited = _readVisited(box);
+                      return _buildMap(visited);
                     },
-                  );
+                  ),
+          ),
+          ValueListenableBuilder<Box<dynamic>>(
+            valueListenable: _visitedBox.listenable(keys: const [_visitedKey]),
+            builder: (context, box, _) {
+              final visited = _readVisited(box);
+              return _GlassmorphicFooter(
+                visitedCodes: visited,
+                percentageAnimation: _percentageAnimation,
+                selectedContinent: _selectedContinent,
+                onContinentTap: (continent) {
+                  setState(() {
+                    if (_selectedContinent == continent) {
+                      _selectedContinent = null;
+                    } else {
+                      _selectedContinent = continent;
+                    }
+                  });
                 },
-              ),
-            ],
+              );
+            },
           ),
         ],
       ),
@@ -437,40 +414,38 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
       final isVisited = visited.contains(code);
       final isHover = _hoverCode == code && !isVisited;
 
-      // NEW: Get country's continent and check filter
       final country = CountriesData.findByCode(code);
       final countryContinent = country?.continent;
-      final isFiltered = _selectedContinent != null && 
-                         countryContinent != _selectedContinent;
+      final isFiltered =
+          _selectedContinent != null && countryContinent != _selectedContinent;
 
       Color fillColor;
       Color borderColor;
 
       if (isFiltered) {
-        // Fade out countries not in selected continent
         fillColor = const Color(0xFFF5F5F5).withOpacity(0.3);
         borderColor = const Color(0xFFE0E0E0).withOpacity(0.3);
       } else {
-        // Normal colors for selected continent (or when no filter)
         fillColor = isVisited
             ? const Color(0xFF5B7C99)
             : isHover
-                ? const Color(0xFF5B7C99).withOpacity(0.4)
-                : const Color(0xFFEDE9E3);
-        
+            ? const Color(0xFF5B7C99).withOpacity(0.4)
+            : const Color(0xFFEDE9E3);
+
         borderColor = isVisited
             ? const Color(0xFF4A6B7F)
             : isHover
-                ? const Color(0xFF5B7C99)
-                : const Color(0xFFD5CDC1);
+            ? const Color(0xFF5B7C99)
+            : const Color(0xFFD5CDC1);
       }
 
       for (final polygon in entry.value) {
         flutterPolygons.add(
           Polygon(
             points: polygon.outer,
-            holePointsList:
-                polygon.holes.isEmpty ? null : List.from(polygon.holes),
+            holePointsList: polygon.holes.isEmpty
+                ? null
+                : List.from(polygon.holes),
             color: fillColor,
             borderColor: borderColor,
             borderStrokeWidth: 0.8,
@@ -489,7 +464,8 @@ class _WorldMapScreenState extends State<WorldMapScreen> with TickerProviderStat
         maxZoom: 10,
         cameraConstraint: CameraConstraint.contain(bounds: _worldBounds),
         interactionOptions: const InteractionOptions(
-          flags: InteractiveFlag.pinchZoom |
+          flags:
+              InteractiveFlag.pinchZoom |
               InteractiveFlag.drag |
               InteractiveFlag.doubleTapZoom |
               InteractiveFlag.flingAnimation,
@@ -594,7 +570,6 @@ class _GlassmorphicFooter extends StatelessWidget {
   Widget build(BuildContext context) {
     final continents = CountriesData.continents;
     final grouped = CountriesData.byContinent;
-
     final totalVisited = visitedCodes.length;
     final grandTotal = CountriesData.totalCount;
 
@@ -605,62 +580,74 @@ class _GlassmorphicFooter extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.85),
             border: Border(
-              top: BorderSide(
-                color: Colors.grey.shade200,
-                width: 1,
-              ),
+              top: BorderSide(color: Colors.grey.shade200, width: 1),
             ),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              AnimatedBuilder(
-                animation: percentageAnimation,
-                builder: (context, child) {
-                  final displayPct = (percentageAnimation.value * 100).toStringAsFixed(0);
-                  return Row(
-                    children: [
-                      Text(
-                        '$displayPct%',
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF5B7C99),
-                          letterSpacing: -0.5,
+          padding: const EdgeInsets.all(10),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                AnimatedBuilder(
+                  animation: percentageAnimation,
+                  builder: (context, child) {
+                    final displayPct = (percentageAnimation.value * 100)
+                        .toStringAsFixed(0);
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '$displayPct%',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF5B7C99),
+                            letterSpacing: -0.5,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '•',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey.shade400,
+                        const SizedBox(width: 6),
+                        Text(
+                          'World Traveled',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade600,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '$totalVisited / $grandTotal',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.grey.shade700,
+                        const SizedBox(width: 6),
+                        Text(
+                          '•',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade400,
+                          ),
                         ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-              Flexible(
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.end,
+                        const SizedBox(width: 6),
+                        Text(
+                          '$totalVisited / $grandTotal',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  alignment: WrapAlignment.center,
                   children: continents.map((continent) {
-                    final countries = grouped[continent] ?? <Country>[];
+                    final countries = grouped[continent] ?? [];
                     final total = countries.length;
-                    final visitedInContinent =
-                        countries.where((c) => visitedCodes.contains(c.code)).length;
+                    final visitedInContinent = countries
+                        .where((c) => visitedCodes.contains(c.code))
+                        .length;
                     return _ContinentChip(
                       label: continent,
                       visited: visitedInContinent,
@@ -671,8 +658,8 @@ class _GlassmorphicFooter extends StatelessWidget {
                     );
                   }).toList(),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -700,7 +687,7 @@ class _ContinentChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pct = total == 0 ? 0.0 : visited / total;
-    
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -719,16 +706,16 @@ class _ContinentChip extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: isSelected ? Colors.white : const Color(0xFF2C3E50),
               ),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 4),
             Text(
               '${(pct * 100).toStringAsFixed(0)}%',
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: FontWeight.w500,
                 color: isSelected ? Colors.white70 : Colors.grey.shade600,
               ),

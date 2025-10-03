@@ -27,16 +27,58 @@ class _CountryListScreenState extends State<CountryListScreen> {
   bool _isLoading = true;
 
   static const Map<String, String> _flagEmojis = {
-    'US': '🇺🇸', 'CA': '🇨🇦', 'MX': '🇲🇽', 'BR': '🇧🇷', 'AR': '🇦🇷',
-    'GB': '🇬🇧', 'FR': '🇫🇷', 'DE': '🇩🇪', 'IT': '🇮🇹', 'ES': '🇪🇸',
-    'CN': '🇨🇳', 'JP': '🇯🇵', 'IN': '🇮🇳', 'AU': '🇦🇺', 'RU': '🇷🇺',
-    'ZA': '🇿🇦', 'EG': '🇪🇬', 'NG': '🇳🇬', 'KE': '🇰🇪', 'MA': '🇲🇦',
-    'CZ': '🇨🇿', 'PL': '🇵🇱', 'NL': '🇳🇱', 'SE': '🇸🇪', 'NO': '🇳🇴',
-    'DK': '🇩🇰', 'FI': '🇫🇮', 'PT': '🇵🇹', 'GR': '🇬🇷', 'TR': '🇹🇷',
-    'TH': '🇹🇭', 'VN': '🇻🇳', 'ID': '🇮🇩', 'MY': '🇲🇾', 'SG': '🇸🇬',
-    'PH': '🇵🇭', 'KR': '🇰🇷', 'NZ': '🇳🇿', 'CL': '🇨🇱', 'CO': '🇨🇴',
-    'PE': '🇵🇪', 'VE': '🇻🇪', 'UA': '🇺🇦', 'RO': '🇷🇴', 'HU': '🇭🇺',
-    'AT': '🇦🇹', 'CH': '🇨🇭', 'BE': '🇧🇪', 'IE': '🇮🇪', 'CR': '🇨🇷',
+    // North America
+    'US': '🇺🇸', 'CA': '🇨🇦', 'MX': '🇲🇽', 'AG': '🇦🇬', 'BS': '🇧🇸',
+    'BB': '🇧🇧', 'BZ': '🇧🇿', 'CR': '🇨🇷', 'CU': '🇨🇺', 'DM': '🇩🇲',
+    'DO': '🇩🇴', 'SV': '🇸🇻', 'GD': '🇬🇩', 'GT': '🇬🇹', 'HT': '🇭🇹',
+    'HN': '🇭🇳', 'JM': '🇯🇲', 'NI': '🇳🇮', 'PA': '🇵🇦', 'KN': '🇰🇳',
+    'LC': '🇱🇨', 'VC': '🇻🇨', 'TT': '🇹🇹',
+
+    // South America
+    'AR': '🇦🇷', 'BO': '🇧🇴', 'BR': '🇧🇷', 'CL': '🇨🇱', 'CO': '🇨🇴',
+    'EC': '🇪🇨', 'GY': '🇬🇾', 'PY': '🇵🇾', 'PE': '🇵🇪', 'SR': '🇸🇷',
+    'UY': '🇺🇾', 'VE': '🇻🇪',
+
+    // Europe
+    'AL': '🇦🇱', 'AD': '🇦🇩', 'AT': '🇦🇹', 'BY': '🇧🇾', 'BE': '🇧🇪',
+    'BA': '🇧🇦', 'BG': '🇧🇬', 'HR': '🇭🇷', 'CZ': '🇨🇿', 'DK': '🇩🇰',
+    'EE': '🇪🇪', 'FI': '🇫🇮', 'FR': '🇫🇷', 'DE': '🇩🇪', 'GR': '🇬🇷',
+    'HU': '🇭🇺', 'IS': '🇮🇸', 'IE': '🇮🇪', 'IT': '🇮🇹', 'XK': '🇽🇰',
+    'LV': '🇱🇻', 'LI': '🇱🇮', 'LT': '🇱🇹', 'LU': '🇱🇺', 'MT': '🇲🇹',
+    'MD': '🇲🇩', 'MC': '🇲🇨', 'ME': '🇲🇪', 'NL': '🇳🇱', 'MK': '🇲🇰',
+    'NO': '🇳🇴', 'PL': '🇵🇱', 'PT': '🇵🇹', 'RO': '🇷🇴', 'SM': '🇸🇲',
+    'RS': '🇷🇸', 'SK': '🇸🇰', 'SI': '🇸🇮', 'ES': '🇪🇸', 'SE': '🇸🇪',
+    'CH': '🇨🇭', 'UA': '🇺🇦', 'GB': '🇬🇧', 'VA': '🇻🇦',
+
+    // Asia
+    'AF': '🇦🇫', 'AM': '🇦🇲', 'AZ': '🇦🇿', 'BH': '🇧🇭', 'BD': '🇧🇩',
+    'BT': '🇧🇹', 'BN': '🇧🇳', 'KH': '🇰🇭', 'CN': '🇨🇳', 'CY': '🇨🇾',
+    'GE': '🇬🇪', 'IN': '🇮🇳', 'ID': '🇮🇩', 'IR': '🇮🇷', 'IQ': '🇮🇶',
+    'IL': '🇮🇱', 'JP': '🇯🇵', 'JO': '🇯🇴', 'KZ': '🇰🇿', 'KW': '🇰🇼',
+    'KG': '🇰🇬', 'LA': '🇱🇦', 'LB': '🇱🇧', 'MY': '🇲🇾', 'MV': '🇲🇻',
+    'MN': '🇲🇳', 'MM': '🇲🇲', 'NP': '🇳🇵', 'KP': '🇰🇵', 'OM': '🇴🇲',
+    'PK': '🇵🇰', 'PS': '🇵🇸', 'PH': '🇵🇭', 'QA': '🇶🇦', 'RU': '🇷🇺',
+    'SA': '🇸🇦', 'SG': '🇸🇬', 'KR': '🇰🇷', 'LK': '🇱🇰', 'SY': '🇸🇾',
+    'TW': '🇹🇼', 'TJ': '🇹🇯', 'TH': '🇹🇭', 'TL': '🇹🇱', 'TR': '🇹🇷',
+    'TM': '🇹🇲', 'AE': '🇦🇪', 'UZ': '🇺🇿', 'VN': '🇻🇳', 'YE': '🇾🇪',
+
+    // Africa
+    'DZ': '🇩🇿', 'AO': '🇦🇴', 'BJ': '🇧🇯', 'BW': '🇧🇼', 'BF': '🇧🇫',
+    'BI': '🇧🇮', 'CM': '🇨🇲', 'CV': '🇨🇻', 'CF': '🇨🇫', 'TD': '🇹🇩',
+    'KM': '🇰🇲', 'CG': '🇨🇬', 'CD': '🇨🇩', 'DJ': '🇩🇯', 'EG': '🇪🇬',
+    'GQ': '🇬🇶', 'ER': '🇪🇷', 'SZ': '🇸🇿', 'ET': '🇪🇹', 'GA': '🇬🇦',
+    'GM': '🇬🇲', 'GH': '🇬🇭', 'GN': '🇬🇳', 'GW': '🇬🇼', 'CI': '🇨🇮',
+    'KE': '🇰🇪', 'LS': '🇱🇸', 'LR': '🇱🇷', 'LY': '🇱🇾', 'MG': '🇲🇬',
+    'MW': '🇲🇼', 'ML': '🇲🇱', 'MR': '🇲🇷', 'MU': '🇲🇺', 'MA': '🇲🇦',
+    'MZ': '🇲🇿', 'NA': '🇳🇦', 'NE': '🇳🇪', 'NG': '🇳🇬', 'RW': '🇷🇼',
+    'ST': '🇸🇹', 'SN': '🇸🇳', 'SC': '🇸🇨', 'SL': '🇸🇱', 'SO': '🇸🇴',
+    'ZA': '🇿🇦', 'SS': '🇸🇸', 'SD': '🇸🇩', 'TZ': '🇹🇿', 'TG': '🇹🇬',
+    'TN': '🇹🇳', 'UG': '🇺🇬', 'ZM': '🇿🇲', 'ZW': '🇿🇼',
+
+    // Oceania
+    'AU': '🇦🇺', 'FJ': '🇫🇯', 'KI': '🇰🇮', 'MH': '🇲🇭', 'FM': '🇫🇲',
+    'NR': '🇳🇷', 'NZ': '🇳🇿', 'PW': '🇵🇼', 'PG': '🇵🇬', 'WS': '🇼🇸',
+    'SB': '🇸🇧', 'TO': '🇹🇴', 'TV': '🇹🇻', 'VU': '🇻🇺',
   };
 
   @override
@@ -51,7 +93,7 @@ class _CountryListScreenState extends State<CountryListScreen> {
         CountriesData.continents.contains(widget.initialContinent)) {
       _selectedContinent = widget.initialContinent!;
     }
-    
+
     _openDataBox();
   }
 
@@ -72,36 +114,35 @@ class _CountryListScreenState extends State<CountryListScreen> {
   List<Country> _filtered() {
     final s = _search.trim().toLowerCase();
     return CountriesData.allCountries.where((c) {
-      final matchesCont = _selectedContinent == 'All' ||
-          c.continent == _selectedContinent;
+      final matchesCont =
+          _selectedContinent == 'All' || c.continent == _selectedContinent;
       final matchesSearch =
           s.isEmpty ||
           c.name.toLowerCase().contains(s) ||
           c.code.toLowerCase().contains(s);
       return matchesCont && matchesSearch;
-    }).toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
+    }).toList()..sort((a, b) => a.name.compareTo(b.name));
   }
 
   List<Country> _recentCountries() {
     if (dataBox == null) return [];
-    
+
     final visited = _visited();
     final recentWithDates = <MapEntry<Country, DateTime>>[];
-    
+
     for (final code in visited) {
       final country = CountriesData.findByCode(code);
       if (country == null) continue;
-      
+
       final countryData = dataBox!.get(code) as Map?;
       final dateString = countryData?['visitedDate'] as String?;
       final date = dateString != null ? DateTime.tryParse(dateString) : null;
-      
+
       if (date != null) {
         recentWithDates.add(MapEntry(country, date));
       }
     }
-    
+
     recentWithDates.sort((a, b) => b.value.compareTo(a.value));
     return recentWithDates.take(5).map((e) => e.key).toList();
   }
@@ -111,21 +152,21 @@ class _CountryListScreenState extends State<CountryListScreen> {
     final unvisited = CountriesData.allCountries
         .where((c) => !visited.contains(c.code))
         .toList();
-    
+
     if (unvisited.isEmpty) return null;
     return unvisited[Random().nextInt(unvisited.length)];
   }
 
   String? _getVisitDate(String code) {
     if (dataBox == null) return null;
-    
+
     final countryData = dataBox!.get(code) as Map?;
     final dateString = countryData?['visitedDate'] as String?;
     if (dateString == null) return null;
-    
+
     final date = DateTime.tryParse(dateString);
     if (date == null) return null;
-    
+
     return '${date.month}/${date.year}';
   }
 
@@ -154,13 +195,11 @@ class _CountryListScreenState extends State<CountryListScreen> {
           backgroundColor: const Color(0xFF5B7C99),
         ),
         body: const Center(
-          child: CircularProgressIndicator(
-            color: Color(0xFF5B7C99),
-          ),
+          child: CircularProgressIndicator(color: Color(0xFF5B7C99)),
         ),
       );
     }
-    
+
     final visited = _visited();
     final chips = ['All', ...CountriesData.continents];
     final recent = _recentCountries();
@@ -184,7 +223,7 @@ class _CountryListScreenState extends State<CountryListScreen> {
               onChanged: (v) => setState(() => _search = v),
             ),
           ),
-          
+
           // Continent filter chips
           SizedBox(
             height: 42,
@@ -203,11 +242,13 @@ class _CountryListScreenState extends State<CountryListScreen> {
               },
             ),
           ),
-          
+
           const SizedBox(height: 8),
-          
+
           // Recent section
-          if (recent.isNotEmpty && _search.isEmpty && _selectedContinent == 'All') ...[
+          if (recent.isNotEmpty &&
+              _search.isEmpty &&
+              _selectedContinent == 'All') ...[
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               color: Colors.grey[100],
@@ -232,17 +273,23 @@ class _CountryListScreenState extends State<CountryListScreen> {
               return ListTile(
                 leading: Text(flag, style: const TextStyle(fontSize: 32)),
                 title: Text(c.name),
-                subtitle: visitDate != null 
-                    ? Text('Added $visitDate', 
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]))
+                subtitle: visitDate != null
+                    ? Text(
+                        'Added $visitDate',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      )
                     : null,
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF5B7C99)),
+                trailing: const Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: Color(0xFF5B7C99),
+                ),
                 onTap: () => _openCountryDetail(c),
               );
             }),
             const Divider(),
           ],
-          
+
           // Country list
           Expanded(
             child: ListView.builder(
@@ -252,7 +299,7 @@ class _CountryListScreenState extends State<CountryListScreen> {
                 final isVisited = visited.contains(c.code);
                 final flag = _flagEmojis[c.code] ?? '🏳️';
                 final visitDate = isVisited ? _getVisitDate(c.code) : null;
-                
+
                 return ListTile(
                   leading: Text(flag, style: const TextStyle(fontSize: 32)),
                   title: Text(c.name),
@@ -276,7 +323,9 @@ class _CountryListScreenState extends State<CountryListScreen> {
                     value: isVisited,
                     onChanged: (_) => _toggle(c.code),
                   ),
-                  onTap: isVisited ? () => _openCountryDetail(c) : () => _toggle(c.code),
+                  onTap: isVisited
+                      ? () => _openCountryDetail(c)
+                      : () => _toggle(c.code),
                 );
               },
             ),
