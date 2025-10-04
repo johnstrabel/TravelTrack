@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/auth_service.dart';
 import 'auth_screen.dart';
+import 'username_setup_screen.dart';
 import 'world_map_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -25,9 +27,23 @@ class _SplashScreenState extends State<SplashScreen> {
     final session = Supabase.instance.client.auth.currentSession;
 
     if (session != null) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const WorldMapScreen()),
-      );
+      // User is logged in - check if they have a profile
+      final userId = session.user.id;
+      final profile = await AuthService.getUserProfile(userId);
+
+      if (!mounted) return;
+
+      if (profile == null) {
+        // No profile yet - go to username setup
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const UsernameSetupScreen()),
+        );
+      } else {
+        // Profile exists - go to main app
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const WorldMapScreen()),
+        );
+      }
     } else {
       Navigator.of(
         context,
