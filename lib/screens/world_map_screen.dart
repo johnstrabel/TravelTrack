@@ -1,3 +1,4 @@
+// lib/screens/world_map_screen.dart
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
@@ -8,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/countries.dart';
 import '../services/country_polygons.dart';
@@ -15,6 +17,8 @@ import '../models/country.dart';
 import 'country_list_screen.dart';
 import 'country_detail_screen.dart';
 import 'profile_screen.dart';
+import 'friends_screen.dart';
+import 'settings_screen.dart';
 
 class WorldMapScreen extends StatefulWidget {
   const WorldMapScreen({super.key});
@@ -24,27 +28,43 @@ class WorldMapScreen extends StatefulWidget {
 }
 
 class _WorldMapScreenState extends State<WorldMapScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
+  // Hive keys
   static const _visitedKey = 'codes';
+
+  // UI timings
   static const _flashDuration = Duration(milliseconds: 450);
 
+  // Map & data
+  final MapController _mapController = MapController();
   late final Box<dynamic> _visitedBox;
   Box<dynamic>? _profileBox;
-  String? _profilePicturePath;
   CountryPolygons? _countryPolygons;
-  bool _loadingPolygons = true;
-  bool _isSelectMode = false;
-  late AnimationController _fabAnimationController;
-  late AnimationController _percentageController;
-  late Animation<double> _percentageAnimation;
 
+  // Avatar
+  String? _profilePicturePath;
+
+  // Loading flags
+  bool _loadingPolygons = true;
+
+  // Modes & filters
+  bool _isSelectMode = false;
   String? _selectedContinent;
 
-  final MapController _mapController = MapController();
+  // Hover / flash
   String? _hoverCode;
   LatLng? _flashPoint;
   Timer? _flashTimer;
 
+  // Animations
+  late final AnimationController _fabAnimationController;
+  late final AnimationController _percentageController;
+  late Animation<double> _percentageAnimation;
+
+  // Drawer key for opening programmatically
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  // Map bounds & start
   static const _initialCenter = LatLng(22, 0.0);
   static final LatLngBounds _worldBounds = LatLngBounds(
     const LatLng(-58, -180),
@@ -54,14 +74,26 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
+    // Animations
     _fabAnimationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
     _percentageController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 900),
     );
+    // Safe default to avoid late-init nulls before polygons load
+    _percentageAnimation = Tween<double>(begin: 0.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _percentageController,
+        curve: Curves.easeOutCubic,
+      ),
+    );
+
+    // Hive init
     _visitedBox = Hive.box('visited_countries');
     if (!_visitedBox.containsKey(_visitedKey)) {
       _visitedBox.put(_visitedKey, <String>[]);
@@ -71,16 +103,26 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         _visitedBox.put(_visitedKey, existing.cast<String>().toList());
       }
     }
+
     _loadPolygons();
     _loadProfilePicture();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _flashTimer?.cancel();
     _fabAnimationController.dispose();
     _percentageController.dispose();
     super.dispose();
+  }
+
+  // Keep avatar fresh when returning to foreground
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadProfilePicture();
+    }
   }
 
   Future<void> _loadPolygons() async {
@@ -89,6 +131,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         'assets/geo/world_countries_simplified.geojson',
       );
       if (!mounted) return;
+
       setState(() {
         _countryPolygons = polygons;
         _loadingPolygons = false;
@@ -102,95 +145,119 @@ class _WorldMapScreenState extends State<WorldMapScreen>
           curve: Curves.easeOutCubic,
         ),
       );
-      _percentageController.forward();
-    } catch (_) {
+      _percentageController
+        ..reset()
+        ..forward();
+    } catch (e) {
+      // ignore: avoid_print
+      print('❌ Error loading polygons: $e');
       if (!mounted) return;
       setState(() => _loadingPolygons = false);
     }
   }
 
   Future<void> _loadProfilePicture() async {
-    _profileBox = await Hive.openBox('profile_data');
-    if (!mounted) return;
-    setState(() {
-      _profilePicturePath = _profileBox!.get('profilePicture') as String?;
-    });
+    try {
+      _profileBox ??= await Hive.openBox('user_profile');
+
+      final supabase = Supabase.instance.client;
+      final userId = supabase.auth.currentUser?.id;
+
+      // Try fresh from Supabase first
+      if (userId != null) {
+        final profile = await supabase
+            .from('users')
+            .select('profile_pic_url')
+            .eq('id', userId)
+            .maybeSingle();
+
+        final url = (profile?['profile_pic_url'] as String?);
+        if (url != null && url.isNotEmpty) {
+          // ignore: avoid_print
+          print('📸 Loaded profile pic URL (remote): $url');
+          if (!mounted) return;
+          setState(() => _profilePicturePath = url);
+          await _profileBox?.put('profile_pic_url', url);
+          return;
+        }
+      }
+
+      // Fall back to cached
+      final cachedUrl = _profileBox?.get('profile_pic_url') as String?;
+      if (cachedUrl != null && cachedUrl.isNotEmpty) {
+        // ignore: avoid_print
+        print('📸 Using cached profile pic URL');
+        if (!mounted) return;
+        setState(() => _profilePicturePath = cachedUrl);
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('❌ Error loading profile picture: $e');
+    }
   }
 
+  // ---------- Visited persistence helpers ----------
   Set<String> _readVisited(Box<dynamic> box) {
     final raw = box.get(_visitedKey);
     if (raw is List) {
-      return raw.whereType<String>().map((code) => code.toUpperCase()).toSet();
+      return raw.whereType<String>().map((c) => c.toUpperCase()).toSet();
     }
     if (raw is Set) {
-      return raw.cast<String>().map((code) => code.toUpperCase()).toSet();
+      return raw.cast<String>().map((c) => c.toUpperCase()).toSet();
     }
     return <String>{};
   }
 
   void _writeVisited(Set<String> codes) {
-    final normalised = codes.map((code) => code.toUpperCase()).toList()..sort();
-    _visitedBox.put(_visitedKey, normalised);
+    final normalized = codes.map((c) => c.toUpperCase()).toList()..sort();
+    _visitedBox.put(_visitedKey, normalized);
   }
 
   void _toggleCountry(String code) {
     final visited = _readVisited(_visitedBox);
-    if (visited.contains(code)) {
+    final wasVisited = visited.contains(code);
+    if (wasVisited) {
       visited.remove(code);
     } else {
       visited.add(code);
     }
     _writeVisited(visited);
 
+    // Animate percentage from current value to new value
+    final newPct = visited.length / CountriesData.totalCount;
     _percentageController.reset();
-    final totalPct = visited.length / CountriesData.totalCount;
     _percentageAnimation =
-        Tween<double>(begin: _percentageAnimation.value, end: totalPct).animate(
+        Tween<double>(begin: _percentageAnimation.value, end: newPct).animate(
           CurvedAnimation(
             parent: _percentageController,
             curve: Curves.easeOutCubic,
           ),
         );
     _percentageController.forward();
+
+    // Optional hook: sync single toggle to cloud (upsert/delete)
+    // await DataSyncService.syncCountryToggle(code, wasVisited ? 'remove' : 'add');
   }
 
+  // ---------- Map interactions ----------
   void _handleTap(TapPosition position, LatLng latLng) {
-    if (_countryPolygons == null) return;
+    final polys = _countryPolygons;
+    if (polys == null) return;
 
-    final code = _countryPolygons!.findCountryCodeContaining(latLng);
+    final code = polys.findCountryCodeContaining(latLng);
     if (code == null) return;
 
     if (_isSelectMode) {
       _triggerFlash(latLng);
-
-      final visited = _readVisited(_visitedBox);
-      final wasVisited = visited.contains(code);
-      if (wasVisited) {
-        visited.remove(code);
-      } else {
-        visited.add(code);
-      }
-      _writeVisited(visited);
-
-      _percentageController.reset();
-      final totalPct = visited.length / CountriesData.totalCount;
-      _percentageAnimation =
-          Tween<double>(
-            begin: _percentageAnimation.value,
-            end: totalPct,
-          ).animate(
-            CurvedAnimation(
-              parent: _percentageController,
-              curve: Curves.easeOutCubic,
-            ),
-          );
-      _percentageController.forward();
+      _toggleCountry(code);
 
       final country = CountriesData.findByCode(code);
       if (!mounted || country == null) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${country.name} ${wasVisited ? 'removed' : 'added'}'),
+          content: Text(
+            '${country.name} ${_readVisited(_visitedBox).contains(code) ? 'added' : 'removed'}',
+          ),
           duration: const Duration(milliseconds: 900),
           behavior: SnackBarBehavior.floating,
         ),
@@ -224,8 +291,9 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   }
 
   void _handleHover(PointerHoverEvent event, LatLng latLng) {
-    if (_countryPolygons == null) return;
-    final code = _countryPolygons!.findCountryCodeContaining(latLng);
+    final polys = _countryPolygons;
+    if (polys == null) return;
+    final code = polys.findCountryCodeContaining(latLng);
     if (code != _hoverCode) {
       setState(() => _hoverCode = code);
     }
@@ -249,9 +317,11 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     });
   }
 
+  // ---------- UI ----------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: const Color(0xFFB8D4E8),
       appBar: AppBar(
         backgroundColor: Colors.white,
@@ -287,10 +357,38 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                   child: Container(
                     color: const Color(0xFF5B7C99),
                     child: _profilePicturePath != null
-                        ? Image.file(
-                            File(_profilePicturePath!),
-                            fit: BoxFit.cover,
-                          )
+                        ? (_profilePicturePath!.startsWith('http')
+                              ? Image.network(
+                                  _profilePicturePath!,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const Icon(
+                                    Icons.person,
+                                    color: Colors.white,
+                                    size: 22,
+                                  ),
+                                  loadingBuilder: (context, child, prog) {
+                                    if (prog == null) return child;
+                                    return const Center(
+                                      child: SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                )
+                              : Image.file(
+                                  File(_profilePicturePath!),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const Icon(
+                                    Icons.person,
+                                    color: Colors.white,
+                                    size: 22,
+                                  ),
+                                ))
                         : const Icon(
                             Icons.person,
                             color: Colors.white,
@@ -346,20 +444,14 @@ class _WorldMapScreenState extends State<WorldMapScreen>
               ],
             ),
             child: IconButton(
-              icon: const Icon(Icons.list_rounded, color: Colors.white),
-              tooltip: 'Country List',
-              onPressed: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => CountryListScreen(onToggle: _toggleCountry),
-                  ),
-                );
-                setState(() {});
-              },
+              icon: const Icon(Icons.menu, color: Colors.white),
+              tooltip: 'Menu',
+              onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
             ),
           ),
         ],
       ),
+      endDrawer: _buildMenuDrawer(),
       body: Column(
         children: [
           Expanded(
@@ -402,13 +494,111 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     );
   }
 
+  Widget _buildMenuDrawer() {
+    return Drawer(
+      child: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF5B7C99), Color(0xFF4A6B7F)],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(24),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.travel_explore,
+                      color: Colors.white,
+                      size: 32,
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Menu',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(color: Colors.white24, height: 1),
+              const SizedBox(height: 16),
+
+              _DrawerMenuItem(
+                icon: Icons.people,
+                title: 'Friends',
+                subtitle: 'Manage your connections',
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const FriendsScreen()),
+                  );
+                },
+              ),
+              _DrawerMenuItem(
+                icon: Icons.list_rounded,
+                title: 'Country List',
+                subtitle: 'Browse all countries',
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          CountryListScreen(onToggle: _toggleCountry),
+                    ),
+                  );
+                },
+              ),
+              _DrawerMenuItem(
+                icon: Icons.settings,
+                title: 'Settings',
+                subtitle: 'Account & preferences',
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  );
+                },
+              ),
+
+              const Spacer(),
+
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'Travel Tracker v1.0',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.6),
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildMap(Set<String> visited) {
     final polygons = _countryPolygons;
-    if (polygons == null) {
-      return const SizedBox.shrink();
-    }
+    if (polygons == null) return const SizedBox.shrink();
 
     final flutterPolygons = <Polygon>[];
+
     for (final entry in polygons.polygonsByCode.entries) {
       final code = entry.key;
       final isVisited = visited.contains(code);
@@ -455,46 +645,122 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       }
     }
 
-    return FlutterMap(
-      mapController: _mapController,
-      options: MapOptions(
-        initialCenter: _initialCenter,
-        initialZoom: 2.3,
-        minZoom: 1.6,
-        maxZoom: 10,
-        cameraConstraint: CameraConstraint.contain(bounds: _worldBounds),
-        interactionOptions: const InteractionOptions(
-          flags:
-              InteractiveFlag.pinchZoom |
-              InteractiveFlag.drag |
-              InteractiveFlag.doubleTapZoom |
-              InteractiveFlag.flingAnimation,
-          enableMultiFingerGestureRace: true,
-        ),
-        onTap: _handleTap,
-        onPointerHover: _handleHover,
-      ),
-      children: [
-        Container(color: const Color(0xFFB8D4E8)),
-        PolygonLayer(polygons: flutterPolygons),
-        if (_flashPoint != null)
-          CircleLayer(
-            circles: [
-              CircleMarker(
-                point: _flashPoint!,
-                radius: 8,
-                useRadiusInMeter: false,
-                color: const Color(0xFF5B7C99).withOpacity(0.6),
-                borderColor: Colors.white,
-                borderStrokeWidth: 2,
-              ),
-            ],
+    return MouseRegion(
+      onHover: (evt) {
+        if (evt is PointerHoverEvent) {
+          final pos = evt.localPosition;
+          // Convert hover screen pos to LatLng via map; FlutterMap exposes pointer -> latlng via handlers
+          // but we already use onPointerHover in options. Keep this wrapper for web/desktop hovers.
+        }
+      },
+      onExit: _handleHoverExit,
+      child: FlutterMap(
+        mapController: _mapController,
+        options: MapOptions(
+          initialCenter: _initialCenter,
+          initialZoom: 2.3,
+          minZoom: 1.6,
+          maxZoom: 10,
+          cameraConstraint: CameraConstraint.contain(bounds: _worldBounds),
+          interactionOptions: const InteractionOptions(
+            flags:
+                InteractiveFlag.pinchZoom |
+                InteractiveFlag.drag |
+                InteractiveFlag.doubleTapZoom |
+                InteractiveFlag.flingAnimation,
+            enableMultiFingerGestureRace: true,
           ),
-      ],
+          onTap: _handleTap,
+          onPointerHover: _handleHover,
+        ),
+        children: [
+          Container(color: const Color(0xFFB8D4E8)),
+          PolygonLayer(polygons: flutterPolygons),
+          if (_flashPoint != null)
+            CircleLayer(
+              circles: [
+                CircleMarker(
+                  point: _flashPoint!,
+                  radius: 8,
+                  useRadiusInMeter: false,
+                  color: const Color(0xFF5B7C99).withOpacity(0.6),
+                  borderColor: Colors.white,
+                  borderStrokeWidth: 2,
+                ),
+              ],
+            ),
+        ],
+      ),
     );
   }
 }
 
+// ------------------ Drawer Menu Item ------------------
+class _DrawerMenuItem extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _DrawerMenuItem({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: Colors.white.withOpacity(0.5)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ------------------ Mode Button ------------------
 class _ModeButton extends StatelessWidget {
   final String label;
   final IconData icon;
@@ -544,6 +810,7 @@ class _ModeButton extends StatelessWidget {
   }
 }
 
+// ------------------ Footer ------------------
 class _GlassmorphicFooter extends StatelessWidget {
   const _GlassmorphicFooter({
     required this.visitedCodes,
@@ -592,71 +859,38 @@ class _GlassmorphicFooter extends StatelessWidget {
               children: [
                 AnimatedBuilder(
                   animation: percentageAnimation,
-                  builder: (context, child) {
-                    final displayPct = (percentageAnimation.value * 100)
-                        .toStringAsFixed(0);
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          '$displayPct%',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF5B7C99),
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'World Traveled',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '•',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade400,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '$totalVisited / $grandTotal',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.grey.shade500,
-                          ),
-                        ),
-                      ],
+                  builder: (context, _) {
+                    final pct = percentageAnimation.value * 100;
+                    return Text(
+                      '${pct.toStringAsFixed(1)}% World Traveled · $totalVisited / $grandTotal',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF2C3E50),
+                      ),
                     );
                   },
                 ),
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  alignment: WrapAlignment.center,
-                  children: continents.map((continent) {
-                    final countries = grouped[continent] ?? [];
-                    final total = countries.length;
-                    final visitedInContinent = countries
-                        .where((c) => visitedCodes.contains(c.code))
-                        .length;
-                    return _ContinentChip(
-                      label: continent,
-                      visited: visitedInContinent,
-                      total: total,
-                      color: _continentColors[continent] ?? Colors.white,
-                      isSelected: selectedContinent == continent,
-                      onTap: () => onContinentTap(continent),
-                    );
-                  }).toList(),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: continents.map((continent) {
+                      final countries = grouped[continent] ?? [];
+                      final total = countries.length;
+                      final visitedInContinent = countries
+                          .where((c) => visitedCodes.contains(c.code))
+                          .length;
+                      return _ContinentChip(
+                        label: continent,
+                        visited: visitedInContinent,
+                        total: total,
+                        color: _continentColors[continent] ?? Colors.white,
+                        isSelected: selectedContinent == continent,
+                        onTap: () => onContinentTap(continent),
+                      );
+                    }).toList(),
+                  ),
                 ),
               ],
             ),
@@ -692,6 +926,7 @@ class _ContinentChip extends StatelessWidget {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        margin: const EdgeInsets.symmetric(horizontal: 4),
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFF5B7C99) : color,
           borderRadius: BorderRadius.circular(12),

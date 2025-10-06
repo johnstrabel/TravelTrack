@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/data_clear_service.dart';
 import 'auth_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -11,7 +12,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _supabase = Supabase.instance.client;
-  
+
   String _username = '';
   String _email = '';
   bool _isLoading = true;
@@ -39,6 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         });
       }
     } catch (e) {
+      print('⚠️ Error loading user data: $e');
       setState(() => _isLoading = false);
     }
   }
@@ -56,24 +58,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text(
-              'Log Out',
-              style: TextStyle(color: Colors.red),
-            ),
+            child: const Text('Log Out', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
 
     if (confirmed == true && mounted) {
-      await _supabase.auth.signOut();
-
-      if (!mounted) return;
-
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const AuthScreen()),
-        (route) => false,
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) =>
+            const Center(child: CircularProgressIndicator(color: Colors.white)),
       );
+
+      try {
+        print('🔓 Starting logout process...');
+
+        await _supabase.auth.signOut(scope: SignOutScope.local);
+        print('✅ Supabase session cleared');
+
+        await DataClearService.clearAllUserData();
+        print('✅ All local data cleared');
+
+        if (!mounted) return;
+
+        Navigator.of(context).pop();
+
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const AuthScreen()),
+          (route) => false,
+        );
+
+        print('✅ Logout complete');
+      } catch (e) {
+        print('❌ Logout error: $e');
+        if (!mounted) return;
+
+        Navigator.of(context).pop();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error logging out: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -86,9 +116,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           backgroundColor: const Color(0xFF5B7C99),
         ),
         body: const Center(
-          child: CircularProgressIndicator(
-            color: Color(0xFF5B7C99),
-          ),
+          child: CircularProgressIndicator(color: Color(0xFF5B7C99)),
         ),
       );
     }
@@ -102,50 +130,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       body: ListView(
         children: [
+          const SizedBox(height: 16),
+
           // Account Section
-          _SectionHeader(title: 'Account'),
-          _SettingsTile(
+          _buildSectionHeader('Account'),
+          _buildSettingsTile(
             icon: Icons.person,
             title: 'Username',
             subtitle: '@$_username',
             onTap: () {
-              // TODO: Navigate to edit username screen
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Edit username - Coming soon'),
+                  backgroundColor: Color(0xFF5B7C99),
+                ),
+              );
             },
           ),
-          _SettingsTile(
+          _buildSettingsTile(
             icon: Icons.email,
             title: 'Email',
             subtitle: _email,
-            onTap: null, // Email can't be changed easily
+            onTap: null,
           ),
 
+          const SizedBox(height: 24),
+
           // Privacy Section
-          _SectionHeader(title: 'Privacy'),
-          _SettingsTile(
+          _buildSectionHeader('Privacy'),
+          _buildSettingsTile(
             icon: Icons.lock,
-            title: 'Default Privacy',
-            subtitle: 'Who can see your travels',
+            title: 'Privacy Settings',
+            subtitle: 'Control who can see your profile',
             onTap: () {
-              // TODO: Navigate to privacy settings
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Privacy settings - Coming soon'),
+                  backgroundColor: Color(0xFF5B7C99),
+                ),
+              );
             },
           ),
-          _SettingsTile(
+          _buildSettingsTile(
             icon: Icons.visibility,
             title: 'Profile Visibility',
             subtitle: 'Public',
             onTap: () {
-              // TODO: Toggle visibility
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Profile visibility - Coming soon'),
+                  backgroundColor: Color(0xFF5B7C99),
+                ),
+              );
             },
           ),
 
+          const SizedBox(height: 24),
+
           // Data Section
-          _SectionHeader(title: 'Data'),
-          _SettingsTile(
+          _buildSectionHeader('Data'),
+          _buildSettingsTile(
             icon: Icons.cloud_sync,
             title: 'Sync Data',
             subtitle: 'Upload local data to cloud',
             onTap: () {
-              // TODO: Trigger data sync
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Data sync feature coming soon'),
@@ -154,12 +202,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
             },
           ),
-          _SettingsTile(
+          _buildSettingsTile(
             icon: Icons.download,
             title: 'Export Data',
             subtitle: 'Download your travel data',
             onTap: () {
-              // TODO: Export data as JSON/CSV
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Export feature coming soon'),
@@ -169,26 +216,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
           ),
 
+          const SizedBox(height: 24),
+
           // About Section
-          _SectionHeader(title: 'About'),
-          _SettingsTile(
+          _buildSectionHeader('About'),
+          _buildSettingsTile(
             icon: Icons.info,
             title: 'Version',
             subtitle: '1.0.0',
             onTap: null,
           ),
-          _SettingsTile(
+          _buildSettingsTile(
             icon: Icons.description,
             title: 'Terms of Service',
+            subtitle: 'Read our terms and conditions',
             onTap: () {
-              // TODO: Show terms
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Terms of Service - Coming soon'),
+                  backgroundColor: Color(0xFF5B7C99),
+                ),
+              );
             },
           ),
-          _SettingsTile(
+          _buildSettingsTile(
             icon: Icons.privacy_tip,
             title: 'Privacy Policy',
+            subtitle: 'Read our privacy policy',
             onTap: () {
-              // TODO: Show privacy policy
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Privacy Policy - Coming soon'),
+                  backgroundColor: Color(0xFF5B7C99),
+                ),
+              );
             },
           ),
 
@@ -214,10 +275,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   SizedBox(width: 8),
                   Text(
                     'Log Out',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -229,15 +287,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
-}
 
-class _SectionHeader extends StatelessWidget {
-  final String title;
-
-  const _SectionHeader({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildSectionHeader(String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
       child: Text(
@@ -251,23 +302,13 @@ class _SectionHeader extends StatelessWidget {
       ),
     );
   }
-}
 
-class _SettingsTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String? subtitle;
-  final VoidCallback? onTap;
-
-  const _SettingsTile({
-    required this.icon,
-    required this.title,
-    this.subtitle,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildSettingsTile({
+    required IconData icon,
+    required String title,
+    required String? subtitle,
+    required VoidCallback? onTap,
+  }) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
@@ -285,25 +326,18 @@ class _SettingsTile extends StatelessWidget {
         leading: Icon(icon, color: const Color(0xFF5B7C99)),
         title: Text(
           title,
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 16,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
         ),
         subtitle: subtitle != null
             ? Text(
-                subtitle!,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                ),
+                subtitle,
+                style: TextStyle(color: Colors.grey[600], fontSize: 14),
               )
             : null,
         trailing: onTap != null
             ? Icon(Icons.chevron_right, color: Colors.grey[400])
             : null,
         onTap: onTap,
-        enabled: onTap != null,
       ),
     );
   }

@@ -150,14 +150,17 @@ class DataSyncService {
   static List<DailyEntry> _convertDailyEntries(dynamic entries) {
     if (entries is! List) return [];
 
-    return entries.map((item) {
-      if (item is Map) {
-        return DailyEntry(
-          date: item['date'] as String? ?? '',
-          text: item['text'] as String? ?? '',
-        );
-      }
-      return DailyEntry(date: '', text: '');
-    }).where((e) => e.date.isNotEmpty).toList();
+    return entries
+        .map((item) {
+          if (item is Map) {
+            return DailyEntry(
+              date: item['date'] as String? ?? '',
+              text: item['text'] as String? ?? '',
+            );
+          }
+          return DailyEntry(date: '', text: '');
+        })
+        .where((e) => e.date.isNotEmpty)
+        .toList();
   }
 }
