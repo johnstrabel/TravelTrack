@@ -36,6 +36,7 @@ class _UsernameSetupScreenState extends State<UsernameSetupScreen> {
   @override
   void initState() {
     super.initState();
+    print('🎯🎯🎯 USERNAME_SETUP: initState called 🎯🎯🎯');
     _evaluateSessionStatus();
   }
 
@@ -423,6 +424,8 @@ class _UsernameSetupScreenState extends State<UsernameSetupScreen> {
                 enabled: !_isLoading,
                 maxLines: 3,
                 maxLength: 100,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => FocusScope.of(context).unfocus(),
                 decoration: InputDecoration(
                   hintText: 'Beach lover & foodie...',
                   border: OutlineInputBorder(

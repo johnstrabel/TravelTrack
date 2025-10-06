@@ -16,7 +16,15 @@ class AuthService {
     required String email,
     required String password,
   }) async {
-    return await _supabase.auth.signUp(email: email, password: password);
+    print('📝 AuthService.signUpWithEmail called');
+    final response = await _supabase.auth.signUp(
+      email: email,
+      password: password,
+    );
+    print(
+      '✅ Signup response - user: ${response.user?.id}, session: ${response.session != null}',
+    );
+    return response;
   }
 
   // Sign in with email
@@ -24,10 +32,13 @@ class AuthService {
     required String email,
     required String password,
   }) async {
-    return await _supabase.auth.signInWithPassword(
+    print('🔑 AuthService.signInWithEmail called');
+    final response = await _supabase.auth.signInWithPassword(
       email: email,
       password: password,
     );
+    print('✅ Login response - user: ${response.user?.id}');
+    return response;
   }
 
   // Sign out
@@ -45,6 +56,9 @@ class AuthService {
     final user = currentUser;
     if (user == null) throw Exception('No user logged in');
 
+    print('👤 Creating profile for user: ${user.id}');
+    print('   Username: $username');
+
     await _supabase.from('users').insert({
       'id': user.id,
       'email': user.email,
@@ -53,18 +67,45 @@ class AuthService {
       'bio': bio,
       'profile_pic_url': profilePicUrl,
     });
+
+    print('✅ Profile created successfully');
   }
 
   // Get user profile
   static Future<AppUser?> getUserProfile(String userId) async {
-    final response = await _supabase
-        .from('users')
-        .select()
-        .eq('id', userId)
-        .maybeSingle();
+    print('🔍 getUserProfile called for userId: $userId');
 
-    if (response == null) return null;
-    return AppUser.fromJson(response);
+    try {
+      final response = await _supabase
+          .from('users')
+          .select()
+          .eq('id', userId)
+          .maybeSingle();
+
+      print('📊 Database query response:');
+      print('   Response type: ${response.runtimeType}');
+      print('   Response value: $response');
+
+      if (response == null) {
+        print('❌ No profile found in database (response is null)');
+        return null;
+      }
+
+      print('🔄 Attempting to parse AppUser from JSON...');
+      final profile = AppUser.fromJson(response);
+      print('✅ Profile parsed successfully:');
+      print('   ID: ${profile.id}');
+      print('   Email: ${profile.email}');
+      print('   Username: "${profile.username}"');
+      print('   Display Name: ${profile.displayName}');
+
+      return profile;
+    } catch (e, stackTrace) {
+      print('❌ Error in getUserProfile:');
+      print('   Error: $e');
+      print('   Stack trace: $stackTrace');
+      rethrow;
+    }
   }
 
   // Update user profile

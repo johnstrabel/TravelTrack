@@ -74,6 +74,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   @override
   void initState() {
     super.initState();
+    print('🗺️🗺️🗺️ WORLD_MAP: initState called 🗺️🗺️🗺️');
     WidgetsBinding.instance.addObserver(this);
 
     // Animations

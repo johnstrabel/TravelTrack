@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import '../data/countries.dart';
 
@@ -12,16 +13,16 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  late final Box<dynamic> _profileBox;
+  final _supabase = Supabase.instance.client;
   late final Box<dynamic> _visitedBox;
-  
+
   String _username = '';
   String _bio = '';
   String? _profilePicturePath;
   bool _isLoading = true;
   bool _isEditingUsername = false;
   bool _isEditingBio = false;
-  
+
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _bioController = TextEditingController();
 
@@ -39,13 +40,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadData() async {
-    _profileBox = await Hive.openBox('profile_data');
     _visitedBox = Hive.box('visited_countries');
-    
+
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId != null) {
+        // Load from Supabase (source of truth)
+        final profile = await _supabase
+            .from('users')
+            .select()
+            .eq('id', userId)
+            .maybeSingle();
+
+        if (profile != null) {
+          setState(() {
+            _username = profile['username'] as String? ?? 'traveler';
+            _bio = profile['bio'] as String? ?? '';
+            _profilePicturePath = profile['profile_pic_url'] as String?;
+            _usernameController.text = _username;
+            _bioController.text = _bio;
+            _isLoading = false;
+          });
+          return;
+        }
+      }
+    } catch (e) {
+      print('⚠️ Error loading profile from Supabase: $e');
+    }
+
+    // Fallback: use default values if Supabase fails
     setState(() {
-      _username = _profileBox.get('username', defaultValue: 'traveler') as String;
-      _bio = _profileBox.get('bio', defaultValue: '') as String;
-      _profilePicturePath = _profileBox.get('profilePicture') as String?;
+      _username = 'traveler';
+      _bio = '';
       _usernameController.text = _username;
       _bioController.text = _bio;
       _isLoading = false;
@@ -53,10 +79,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _saveProfile() async {
-    await _profileBox.put('username', _username);
-    await _profileBox.put('bio', _bio);
-    if (_profilePicturePath != null) {
-      await _profileBox.put('profilePicture', _profilePicturePath);
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId != null) {
+        await _supabase
+            .from('users')
+            .update({
+              'username': _username,
+              'bio': _bio,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', userId);
+
+        print('✅ Profile updated in Supabase');
+      }
+    } catch (e) {
+      print('❌ Error saving profile: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -69,18 +115,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       if (result != null && result.files.isNotEmpty) {
         final filePath = result.files.first.path;
-        if (filePath != null) {
-          setState(() {
-            _profilePicturePath = filePath;
-          });
-          await _saveProfile();
-        }
+        if (filePath == null) return;
+
+        // Upload to Supabase Storage
+        final userId = _supabase.auth.currentUser?.id;
+        if (userId == null) return;
+
+        final file = File(filePath);
+        final ext = filePath.split('.').last.toLowerCase();
+        final ts = DateTime.now().millisecondsSinceEpoch;
+        final storagePath = 'profile-pictures/$userId-$ts.$ext';
+
+        await _supabase.storage
+            .from('user-content')
+            .upload(
+              storagePath,
+              file,
+              fileOptions: const FileOptions(upsert: true),
+            );
+
+        final publicUrl = _supabase.storage
+            .from('user-content')
+            .getPublicUrl(storagePath);
+
+        // Update database
+        await _supabase
+            .from('users')
+            .update({
+              'profile_pic_url': publicUrl,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', userId);
+
+        setState(() {
+          _profilePicturePath = publicUrl;
+        });
+
+        print('✅ Profile picture updated');
       }
     } catch (e) {
+      print('❌ Error uploading profile picture: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error selecting image: $e'),
+          content: Text('Error uploading image: $e'),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
         ),
@@ -99,23 +177,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Map<String, int> _getContinentCounts() {
     final visited = _getVisitedCountries();
     final counts = <String, int>{};
-    
+
     for (final code in visited) {
       final country = CountriesData.findByCode(code);
       if (country != null) {
         counts[country.continent] = (counts[country.continent] ?? 0) + 1;
       }
     }
-    
+
     return counts;
   }
 
   String? _getLastVisitedCountry() {
-    // For now, just return the first country in the list
-    // In the future, we could track actual visit dates
     final visited = _getVisitedCountries();
     if (visited.isEmpty) return null;
-    
+
     final code = visited.first;
     final country = CountriesData.findByCode(code);
     return country?.name;
@@ -130,16 +206,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
           backgroundColor: const Color(0xFF5B7C99),
         ),
         body: const Center(
-          child: CircularProgressIndicator(
-            color: Color(0xFF5B7C99),
-          ),
+          child: CircularProgressIndicator(color: Color(0xFF5B7C99)),
         ),
       );
     }
 
     final visited = _getVisitedCountries();
     final totalCountries = CountriesData.totalCount;
-    final percentage = ((visited.length / totalCountries) * 100).toStringAsFixed(1);
+    final percentage = ((visited.length / totalCountries) * 100)
+        .toStringAsFixed(1);
     final continentCounts = _getContinentCounts();
     final continentsVisited = continentCounts.keys.length;
     final lastVisited = _getLastVisitedCountry();
@@ -191,10 +266,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           child: ClipOval(
                             child: _profilePicturePath != null
-                                ? Image.file(
-                                    File(_profilePicturePath!),
-                                    fit: BoxFit.cover,
-                                  )
+                                ? (_profilePicturePath!.startsWith('http')
+                                      ? Image.network(
+                                          _profilePicturePath!,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) =>
+                                              const Icon(
+                                                Icons.person,
+                                                size: 50,
+                                                color: Color(0xFF5B7C99),
+                                              ),
+                                        )
+                                      : Image.file(
+                                          File(_profilePicturePath!),
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) =>
+                                              const Icon(
+                                                Icons.person,
+                                                size: 50,
+                                                color: Color(0xFF5B7C99),
+                                              ),
+                                        ))
                                 : const Icon(
                                     Icons.person,
                                     size: 50,
@@ -228,7 +320,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  
+
                   // Username
                   _isEditingUsername
                       ? Row(
@@ -272,7 +364,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.check, color: Colors.white),
+                              icon: const Icon(
+                                Icons.check,
+                                color: Colors.white,
+                              ),
                               onPressed: () {
                                 setState(() {
                                   _username = _usernameController.text.trim();
@@ -314,8 +409,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         ),
                   const SizedBox(height: 8),
-                  
-                  // Bio
+
+                  // Bio (rest of the build method stays the same...)
                   _isEditingBio
                       ? Column(
                           children: [
@@ -328,6 +423,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               textAlign: TextAlign.center,
                               maxLines: 2,
                               maxLength: 100,
+                              textInputAction: TextInputAction.done,
+                              onSubmitted: (_) =>
+                                  FocusScope.of(context).unfocus(),
                               decoration: InputDecoration(
                                 isDense: true,
                                 contentPadding: const EdgeInsets.all(12),
@@ -425,7 +523,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
-            // Stats Section
+            // Stats Section (keep all your existing stats code below...)
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -445,7 +543,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  
+
                   // Main Stats Card
                   Container(
                     padding: const EdgeInsets.all(24),
@@ -510,7 +608,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       const Text(
                                         'Last Added',
@@ -539,13 +638,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ],
                     ),
                   ),
-                  
+
                   const SizedBox(height: 24),
-                  
+
                   // Continent Breakdown
                   const Row(
                     children: [
-                      Icon(Icons.travel_explore_rounded, color: Color(0xFF5B7C99)),
+                      Icon(
+                        Icons.travel_explore_rounded,
+                        color: Color(0xFF5B7C99),
+                      ),
                       SizedBox(width: 8),
                       Text(
                         'By Continent',
@@ -557,12 +659,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  
+
                   ...CountriesData.continents.map((continent) {
                     final count = continentCounts[continent] ?? 0;
-                    final total = CountriesData.byContinent[continent]?.length ?? 0;
+                    final total =
+                        CountriesData.byContinent[continent]?.length ?? 0;
                     final pct = total > 0 ? (count / total) : 0.0;
-                    
+
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(16),
@@ -642,11 +745,7 @@ class _StatItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Icon(
-          icon,
-          color: const Color(0xFF5B7C99),
-          size: 28,
-        ),
+        Icon(icon, color: const Color(0xFF5B7C99), size: 28),
         const SizedBox(height: 8),
         Text(
           value,
