@@ -81,13 +81,13 @@ class CountryStatusModal extends StatelessWidget {
 
             // Status options
             _StatusOption(
-              status: CountryStatus.want,
-              label: 'Want to Visit',
+              status: CountryStatus.bucketlist,
+              label: 'Bucket List',
               emoji: '🔴',
-              description: 'Countries on your bucket list',
-              isSelected: currentStatus == CountryStatus.want,
+              description: 'Countries you want to visit',
+              isSelected: currentStatus == CountryStatus.bucketlist,
               onTap: () {
-                onStatusSelected(CountryStatus.want);
+                onStatusSelected(CountryStatus.bucketlist);
                 Navigator.pop(context);
               },
             ),
@@ -108,22 +108,10 @@ class CountryStatusModal extends StatelessWidget {
               status: CountryStatus.lived,
               label: 'Lived There',
               emoji: '🟡',
-              description: 'Countries where you\'ve lived',
+              description: 'Countries where you\'ve lived (6+ months)',
               isSelected: currentStatus == CountryStatus.lived,
               onTap: () {
                 onStatusSelected(CountryStatus.lived);
-                Navigator.pop(context);
-              },
-            ),
-
-            _StatusOption(
-              status: CountryStatus.live,
-              label: 'Living Here',
-              emoji: '🔵',
-              description: 'Your current country',
-              isSelected: currentStatus == CountryStatus.live,
-              onTap: () {
-                onStatusSelected(CountryStatus.live);
                 Navigator.pop(context);
               },
             ),

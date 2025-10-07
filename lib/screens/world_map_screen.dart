@@ -14,6 +14,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../data/countries.dart';
 import '../services/country_polygons.dart';
 import '../models/country.dart';
+import '../models/country_status.dart';
+import '../widgets/country_status_modal.dart';
 import 'country_list_screen.dart';
 import 'country_detail_screen.dart';
 import 'profile_screen.dart';
@@ -325,12 +327,15 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     final code = polys.findCountryCodeContaining(latLng);
     if (code == null) return;
 
+    final country = CountriesData.findByCode(code);
+    if (country == null) return;
+
     if (_isSelectMode) {
+      // In select mode: toggle visited status with flash animation
       _triggerFlash(latLng);
       _toggleCountry(code);
 
-      final country = CountriesData.findByCode(code);
-      if (!mounted || country == null) return;
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -341,21 +346,92 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         ),
       );
     } else {
-      final country = CountriesData.findByCode(code);
-      if (country == null) return;
+      // Normal mode: show status modal
+      _showCountryStatusModal(country);
+    }
+  }
 
-      Navigator.of(context).push(
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) =>
-              CountryDetailScreen(
-                countryCode: country.code,
-                countryName: country.name,
-              ),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
+  // Show the status modal when tapping a country
+  void _showCountryStatusModal(Country country) {
+    // Get current status (for now, we'll just check if visited)
+    // TODO: Later we'll store actual status in Hive/Supabase
+    final visited = _readVisited(_visitedBox);
+    final currentStatus = visited.contains(country.code) ? CountryStatus.been : null;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => CountryStatusModal(
+        countryCode: country.code,
+        countryName: country.name,
+        currentStatus: currentStatus,
+        onStatusSelected: (status) {
+          _handleStatusSelection(country.code, status);
+        },
+      ),
+    );
+  }
+
+  // Handle status selection from modal
+  void _handleStatusSelection(String countryCode, CountryStatus? status) {
+    final visited = _readVisited(_visitedBox);
+    
+    if (status == null) {
+      // Remove status
+      visited.remove(countryCode);
+    } else {
+      // Add status (for now just mark as visited)
+      // TODO: Store actual status value in Hive/Supabase later
+      if (!visited.contains(countryCode)) {
+        visited.add(countryCode);
+      }
+    }
+    
+    _writeVisited(visited);
+
+    // Animate percentage update
+    final newPct = visited.length / CountriesData.totalCount;
+    _percentageController.reset();
+    _percentageAnimation = Tween<double>(
+      begin: _percentageAnimation.value,
+      end: newPct,
+    ).animate(
+      CurvedAnimation(
+        parent: _percentageController,
+        curve: Curves.easeOutCubic,
+      ),
+    );
+    _percentageController.forward();
+
+    // Show confirmation
+    if (mounted) {
+      final country = CountriesData.findByCode(countryCode);
+      final statusText = status == null 
+          ? 'Status removed'
+          : '${_getStatusLabel(status)} selected';
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${country?.name}: $statusText'),
+          duration: const Duration(milliseconds: 1500),
+          behavior: SnackBarBehavior.floating,
         ),
       );
+    }
+  }
+
+  // Helper to get status label
+  String _getStatusLabel(CountryStatus status) {
+    switch (status) {
+      case CountryStatus.bucketlist:
+        return 'Want to Visit';
+      case CountryStatus.been:
+        return 'Been There';
+      case CountryStatus.lived:
+        return 'Lived There';
+      case CountryStatus.lived:
+        return 'Living Here';
     }
   }
 
@@ -589,7 +665,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
 
           const SizedBox(width: 12),
 
-          // Filter Button (Placeholder for Phase 5)
+          // Filter Button (Placeholder for Phase 3)
           Container(
             decoration: BoxDecoration(
               color: const Color(0xFF5B7C99),
@@ -606,10 +682,10 @@ class _WorldMapScreenState extends State<WorldMapScreen>
               icon: const Icon(Icons.tune, color: Colors.white, size: 20),
               tooltip: 'Filter',
               onPressed: () {
-                // TODO: Open filter sheet (Phase 5)
+                // TODO: Open filter sheet (Phase 3)
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Filter coming in Phase 5!'),
+                    content: Text('Filter coming in Phase 3!'),
                     duration: Duration(seconds: 1),
                   ),
                 );
