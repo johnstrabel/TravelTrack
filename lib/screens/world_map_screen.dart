@@ -1,4 +1,5 @@
 // lib/screens/world_map_screen.dart
+// ✨ PHASE 3B: Complete with Trip Grouping System
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
@@ -16,8 +17,11 @@ import '../services/country_polygons.dart';
 import '../models/country.dart';
 import '../models/country_status.dart';
 import '../models/filter_mode.dart';
+import '../models/trip.dart';
+import '../services/trip_service.dart';
 import '../widgets/country_status_modal.dart';
 import '../widgets/filter_sheet.dart';
+import '../widgets/create_trip_sheet.dart';
 import 'country_list_screen.dart';
 import 'country_detail_screen.dart';
 import 'profile_screen.dart';
@@ -61,6 +65,10 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   // Modes & filters
   bool _isSelectMode = false;
   FilterMode _filterMode = FilterMode.visited;
+
+  // 🆕 Trips
+  List<Trip> _trips = [];
+  bool _showTripLegend = false;
 
   // Auto-hide UI
   bool _showTopBar = true;
@@ -121,6 +129,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
 
     _loadPolygons();
     _loadProfilePicture();
+    _loadTrips(); // 🆕 Load trips
   }
 
   @override
@@ -138,6 +147,18 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _loadProfilePicture();
+      _loadTrips(); // 🆕 Reload trips on resume
+    }
+  }
+
+  // 🆕 Load all trips
+  Future<void> _loadTrips() async {
+    final trips = await TripService.getAllTrips();
+    if (mounted) {
+      setState(() {
+        _trips = trips;
+        print('✅ Loaded ${trips.length} trips');
+      });
     }
   }
 
@@ -265,6 +286,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     setState(() {
       _showTopBar = false;
       _showLegend = false;
+      _showTripLegend = false; // 🆕 Hide trip legend too
     });
 
     _uiHideTimer = Timer(_autoHideDuration, () {
@@ -272,6 +294,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       setState(() {
         _showTopBar = true;
         _showLegend = true;
+        _showTripLegend = _filterMode == FilterMode.trips && _trips.isNotEmpty;
       });
     });
   }
@@ -403,20 +426,16 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     final visited = _readVisited(_visitedBox);
 
     if (status == null) {
-      // Remove status completely
       statuses.remove(countryCode);
       visited.remove(countryCode);
     } else {
-      // Set the status
       statuses[countryCode] = status.name;
 
-      // CRITICAL: Only add to visited list if it's 'been' or 'lived' (NOT bucketlist)
       if (status == CountryStatus.been || status == CountryStatus.lived) {
         if (!visited.contains(countryCode)) {
           visited.add(countryCode);
         }
       } else {
-        // If changing to bucketlist, remove from visited count
         visited.remove(countryCode);
       }
     }
@@ -424,7 +443,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     _writeStatuses(statuses);
     _writeVisited(visited);
 
-    // Recalculate percentage based ONLY on visited (been + lived)
     final newPct = visited.length / CountriesData.totalCount;
     _percentageController.reset();
     _percentageAnimation =
@@ -499,6 +517,23 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     });
   }
 
+  // 🆕 Show create trip sheet
+  Future<void> _showCreateTripSheet() async {
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => const CreateTripSheet(),
+    );
+
+    if (result == true) {
+      await _loadTrips();
+      setState(() {
+        _showTripLegend = _trips.isNotEmpty;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -544,6 +579,17 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                 right: 16,
                 child: _buildSearchResults(),
               ),
+            // 🆕 Trip legend (shows when in Trips mode)
+            if (_filterMode == FilterMode.trips && _trips.isNotEmpty)
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+                bottom: _showTripLegend ? 80 : -200,
+                left: 0,
+                right: 0,
+                child: _buildTripLegend(),
+              ),
+            // Regular legend
             AnimatedPositioned(
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeInOut,
@@ -552,6 +598,17 @@ class _WorldMapScreenState extends State<WorldMapScreen>
               right: 0,
               child: _buildLegend(),
             ),
+            // 🆕 Create trip FAB (only in Trips mode)
+            if (_filterMode == FilterMode.trips)
+              Positioned(
+                right: 16,
+                bottom: 100,
+                child: FloatingActionButton(
+                  onPressed: _showCreateTripSheet,
+                  backgroundColor: const Color(0xFF5B7C99),
+                  child: const Icon(Icons.add, color: Colors.white),
+                ),
+              ),
           ],
         ),
       ),
@@ -694,7 +751,11 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                   builder: (context) => FilterSheet(
                     currentMode: _filterMode,
                     onModeSelected: (mode) {
-                      setState(() => _filterMode = mode);
+                      setState(() {
+                        _filterMode = mode;
+                        _showTripLegend =
+                            mode == FilterMode.trips && _trips.isNotEmpty;
+                      });
                     },
                   ),
                 );
@@ -853,6 +914,46 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   }
 
   Widget _buildLegend() {
+    List<_LegendItem> legendItems = [];
+
+    switch (_filterMode) {
+      case FilterMode.visited:
+        legendItems = [
+          const _LegendItem(color: Color(0xFF4CAF50), label: 'Been'),
+          const _LegendItem(color: Color(0xFFFF9800), label: 'Lived'),
+        ];
+        break;
+
+      case FilterMode.trips:
+        // 🆕 Show summary instead of individual colors
+        if (_trips.isEmpty) {
+          legendItems = [
+            const _LegendItem(color: Color(0xFF2196F3), label: 'No trips yet'),
+          ];
+        } else {
+          legendItems = [
+            _LegendItem(
+              color: const Color(0xFF2196F3),
+              label:
+                  '${_trips.length} ${_trips.length == 1 ? 'trip' : 'trips'}',
+            ),
+          ];
+        }
+        break;
+
+      case FilterMode.years:
+        legendItems = [
+          const _LegendItem(color: Color(0xFF9C27B0), label: 'By Year'),
+        ];
+        break;
+
+      case FilterMode.bucketList:
+        legendItems = [
+          const _LegendItem(color: Color(0xFFE91E63), label: 'Bucket List'),
+        ];
+        break;
+    }
+
     return Center(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -870,11 +971,106 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _LegendItem(color: const Color(0xFF7ED321), label: 'Been'),
-            const SizedBox(width: 12),
-            _LegendItem(color: const Color(0xFFF5A623), label: 'Lived'),
-            const SizedBox(width: 12),
-            _LegendItem(color: const Color(0xFFE94B3C), label: 'Bucket'),
+            for (int i = 0; i < legendItems.length; i++) ...[
+              legendItems[i],
+              if (i < legendItems.length - 1) const SizedBox(width: 12),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 🆕 Trip legend showing all trips with their colors
+  Widget _buildTripLegend() {
+    return Center(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 600),
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.95),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.flight_takeoff,
+                  size: 18,
+                  color: Color(0xFF5B7C99),
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Your Trips',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF2C3E50),
+                  ),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: _showCreateTripSheet,
+                  child: const Text(
+                    '+ New Trip',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              children: _trips.map((trip) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: trip.color.withOpacity(0.15),
+                    border: Border.all(color: trip.color, width: 1.5),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: trip.color,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${trip.name} (${trip.countryCodes.length})',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: trip.color.computeLuminance() > 0.5
+                              ? Colors.black87
+                              : trip.color,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
           ],
         ),
       ),
@@ -967,7 +1163,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                   final visited = _readVisited(box);
                   final statuses = _readStatuses(box);
 
-                  // Count bucket list countries separately
                   int bucketListCount = 0;
                   for (final entry in statuses.entries) {
                     if (entry.value == 'bucketlist') {
@@ -1029,6 +1224,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     );
   }
 
+  // 🆕 UPDATED: Trip coloring logic
   Widget _buildMap(Set<String> visited) {
     final polygons = _countryPolygons;
     if (polygons == null) return const SizedBox.shrink();
@@ -1041,12 +1237,9 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       final statusString = statuses[code];
       final isHover = _hoverCode == code;
 
-      // Determine if country should be shown based on filter mode
-      bool shouldShow = false;
-      Color fillColor = const Color(0xFFE0E0E0);
-      Color borderColor = const Color(0xFFBDBDBD);
+      Color fillColor = const Color(0xFFD4D4D4);
+      Color borderColor = const Color(0xFFA8A8A8);
 
-      // Parse status
       CountryStatus? status;
       if (statusString != null) {
         try {
@@ -1058,61 +1251,67 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         }
       }
 
-      // Apply filter logic
       switch (_filterMode) {
         case FilterMode.visited:
-          // Show only 'been' and 'lived' countries
-          if (status == CountryStatus.been || status == CountryStatus.lived) {
-            shouldShow = true;
-            if (status == CountryStatus.lived) {
-              fillColor = const Color(0xFFF5A623); // Yellow for lived
-              borderColor = const Color(0xFFE69515);
-            } else {
-              fillColor = const Color(0xFF7ED321); // Green for been
-              borderColor = const Color(0xFF6BC218);
-            }
+          if (status == CountryStatus.been) {
+            fillColor = const Color(0xFF4CAF50);
+            borderColor = const Color(0xFF388E3C);
+          } else if (status == CountryStatus.lived) {
+            fillColor = const Color(0xFFFF9800);
+            borderColor = const Color(0xFFF57C00);
           }
           break;
 
         case FilterMode.trips:
-          // TODO: Implement trip coloring in Phase 3B
-          // For now, show all visited countries in blue
+          // 🆕 Show trip colors
           if (status == CountryStatus.been || status == CountryStatus.lived) {
-            shouldShow = true;
-            fillColor = const Color(0xFF5B7C99);
-            borderColor = const Color(0xFF4A6A85);
+            // Find which trip this country belongs to
+            final trip = _trips.firstWhere(
+              (t) => t.countryCodes.contains(code),
+              orElse: () => Trip(
+                id: '',
+                name: '',
+                colorValue: const Color(
+                  0xFF9E9E9E,
+                ).value, // Gray for unassigned
+              ),
+            );
+
+            if (trip.id.isNotEmpty) {
+              fillColor = trip.color;
+              borderColor = Color.fromRGBO(
+                trip.color.red,
+                trip.color.green,
+                trip.color.blue,
+                1.0,
+              ).withOpacity(0.8);
+            } else {
+              // Unassigned visited country - show in muted gray
+              fillColor = const Color(0xFF9E9E9E);
+              borderColor = const Color(0xFF757575);
+            }
           }
           break;
 
         case FilterMode.years:
-          // TODO: Implement year coloring in Phase 3C
-          // For now, show all visited countries in purple
           if (status == CountryStatus.been || status == CountryStatus.lived) {
-            shouldShow = true;
             fillColor = const Color(0xFF9C27B0);
             borderColor = const Color(0xFF7B1FA2);
           }
           break;
 
         case FilterMode.bucketList:
-          // Show ONLY bucket list countries in red
           if (status == CountryStatus.bucketlist) {
-            shouldShow = true;
-            fillColor = const Color(0xFFE94B3C); // Red
-            borderColor = const Color(0xFFD43B2C);
+            fillColor = const Color(0xFFE91E63);
+            borderColor = const Color(0xFFC2185B);
           }
           break;
       }
 
-      // Skip if shouldn't show
-      if (!shouldShow) continue;
-
-      // Apply hover effect
       if (isHover) {
         fillColor = fillColor.withOpacity(0.7);
       }
 
-      // Create polygons for this country
       for (final polygon in entry.value) {
         flutterPolygons.add(
           Polygon(
@@ -1122,7 +1321,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                 : List.from(polygon.holes),
             color: fillColor,
             borderColor: borderColor,
-            borderStrokeWidth: 0.6,
+            borderStrokeWidth: 0.8,
             isFilled: true,
           ),
         );
@@ -1151,7 +1350,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         keepAlive: true,
       ),
       children: [
-        Container(color: const Color(0xFFB8D4E8)),
+        Container(color: const Color(0xFFA8C9E8)),
         PolygonLayer(polygons: flutterPolygons),
         if (_flashPoint != null)
           CircleLayer(
