@@ -34,6 +34,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
 
   // UI timings
   static const _flashDuration = Duration(milliseconds: 450);
+  static const _autoHideDuration = Duration(seconds: 1);
 
   // Map & data
   final MapController _mapController = MapController();
@@ -47,9 +48,18 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   // Loading flags
   bool _loadingPolygons = true;
 
+  // Search
+  final TextEditingController _searchController = TextEditingController();
+  List<Country> _searchResults = [];
+  bool _showSearchResults = false;
+
   // Modes & filters
   bool _isSelectMode = false;
-  String? _selectedContinent;
+
+  // Auto-hide UI
+  bool _showTopBar = true;
+  bool _showLegend = true;
+  Timer? _uiHideTimer;
 
   // Hover / flash
   String? _hoverCode;
@@ -105,6 +115,9 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       }
     }
 
+    // Search listener
+    _searchController.addListener(_onSearchChanged);
+
     _loadPolygons();
     _loadProfilePicture();
   }
@@ -113,8 +126,10 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _flashTimer?.cancel();
+    _uiHideTimer?.cancel();
     _fabAnimationController.dispose();
     _percentageController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -150,7 +165,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         ..reset()
         ..forward();
     } catch (e) {
-      // ignore: avoid_print
       print('❌ Error loading polygons: $e');
       if (!mounted) return;
       setState(() => _loadingPolygons = false);
@@ -174,7 +188,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
 
         final url = (profile?['profile_pic_url'] as String?);
         if (url != null && url.isNotEmpty) {
-          // ignore: avoid_print
           print('📸 Loaded profile pic URL (remote): $url');
           if (!mounted) return;
           setState(() => _profilePicturePath = url);
@@ -186,15 +199,82 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       // Fall back to cached
       final cachedUrl = _profileBox?.get('profile_pic_url') as String?;
       if (cachedUrl != null && cachedUrl.isNotEmpty) {
-        // ignore: avoid_print
         print('📸 Using cached profile pic URL');
         if (!mounted) return;
         setState(() => _profilePicturePath = cachedUrl);
       }
     } catch (e) {
-      // ignore: avoid_print
       print('❌ Error loading profile picture: $e');
     }
+  }
+
+  // ---------- Search functionality ----------
+  void _onSearchChanged() {
+    final query = _searchController.text.trim().toLowerCase();
+    
+    if (query.isEmpty) {
+      setState(() {
+        _showSearchResults = false;
+        _searchResults = [];
+      });
+      return;
+    }
+
+    final results = CountriesData.allCountries
+        .where((country) =>
+            country.name.toLowerCase().contains(query) ||
+            country.code.toLowerCase().contains(query))
+        .take(10)
+        .toList();
+
+    setState(() {
+      _searchResults = results;
+      _showSearchResults = true;
+    });
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    setState(() {
+      _showSearchResults = false;
+      _searchResults = [];
+    });
+  }
+
+  void _quickAddCountry(String code) {
+    _toggleCountry(code);
+    final country = CountriesData.findByCode(code);
+    if (country != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${country.name} marked as visited'),
+          duration: const Duration(milliseconds: 1500),
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: 'UNDO',
+            onPressed: () => _toggleCountry(code),
+          ),
+        ),
+      );
+    }
+  }
+
+  // ---------- Auto-hide UI ----------
+  void _onMapInteraction() {
+    _uiHideTimer?.cancel();
+    
+    setState(() {
+      _showTopBar = false;
+      _showLegend = false;
+    });
+
+    _uiHideTimer = Timer(_autoHideDuration, () {
+      if (!mounted) return;
+      setState(() {
+        _showTopBar = true;
+        _showLegend = true;
+      });
+    });
   }
 
   // ---------- Visited persistence helpers ----------
@@ -235,9 +315,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
           ),
         );
     _percentageController.forward();
-
-    // Optional hook: sync single toggle to cloud (upsert/delete)
-    // await DataSyncService.syncCountryToggle(code, wasVisited ? 'remove' : 'add');
   }
 
   // ---------- Map interactions ----------
@@ -324,115 +401,196 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: const Color(0xFFB8D4E8),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 2,
-        shadowColor: Colors.black.withOpacity(0.05),
-        toolbarHeight: 64,
-        centerTitle: true,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 12),
-          child: Center(
-            child: GestureDetector(
-              onTap: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                );
-                _loadProfilePicture();
-              },
-              child: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF5B7C99), width: 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.15),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
+      body: GestureDetector(
+        onTap: () {
+          // Dismiss search results when tapping outside
+          if (_showSearchResults) {
+            setState(() => _showSearchResults = false);
+          }
+        },
+        child: Stack(
+          children: [
+            // Map (Full bleed)
+            Positioned.fill(
+              child: _loadingPolygons
+                  ? const Center(
+                      child: CircularProgressIndicator(color: Color(0xFF5B7C99)),
+                    )
+                  : ValueListenableBuilder<Box<dynamic>>(
+                      valueListenable: _visitedBox.listenable(
+                        keys: const [_visitedKey],
+                      ),
+                      builder: (context, box, _) {
+                        final visited = _readVisited(box);
+                        return _buildMap(visited);
+                      },
                     ),
-                  ],
-                ),
-                child: ClipOval(
-                  child: Container(
-                    color: const Color(0xFF5B7C99),
-                    child: _profilePicturePath != null
-                        ? (_profilePicturePath!.startsWith('http')
-                              ? Image.network(
-                                  _profilePicturePath!,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => const Icon(
-                                    Icons.person,
-                                    color: Colors.white,
-                                    size: 22,
-                                  ),
-                                  loadingBuilder: (context, child, prog) {
-                                    if (prog == null) return child;
-                                    return const Center(
-                                      child: SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                )
-                              : Image.file(
-                                  File(_profilePicturePath!),
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => const Icon(
-                                    Icons.person,
-                                    color: Colors.white,
-                                    size: 22,
-                                  ),
-                                ))
-                        : const Icon(
-                            Icons.person,
-                            color: Colors.white,
-                            size: 22,
-                          ),
+            ),
+
+            // Top Bar (Auto-hide)
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              top: _showTopBar ? 0 : -100,
+              left: 0,
+              right: 0,
+              child: _buildTopBar(),
+            ),
+
+            // Search Results Dropdown
+            if (_showSearchResults)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 64,
+                left: 16,
+                right: 16,
+                child: _buildSearchResults(),
+              ),
+
+            // Legend (Auto-hide, bottom)
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              bottom: _showLegend ? 16 : -80,
+              left: 0,
+              right: 0,
+              child: _buildLegend(),
+            ),
+          ],
+        ),
+      ),
+      endDrawer: _buildMenuDrawer(),
+    );
+  }
+
+  Widget _buildTopBar() {
+    return Container(
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 8,
+        left: 16,
+        right: 16,
+        bottom: 8,
+      ),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.white,
+            Colors.white.withOpacity(0.0),
+          ],
+        ),
+      ),
+      child: Row(
+        children: [
+          // Profile Avatar
+          GestureDetector(
+            onTap: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ProfileScreen()),
+              );
+              _loadProfilePicture();
+            },
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFF5B7C99), width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.15),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
                   ),
+                ],
+              ),
+              child: ClipOval(
+                child: Container(
+                  color: const Color(0xFF5B7C99),
+                  child: _profilePicturePath != null
+                      ? (_profilePicturePath!.startsWith('http')
+                            ? Image.network(
+                                _profilePicturePath!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Icon(
+                                  Icons.person,
+                                  color: Colors.white,
+                                  size: 22,
+                                ),
+                              )
+                            : Image.file(
+                                File(_profilePicturePath!),
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Icon(
+                                  Icons.person,
+                                  color: Colors.white,
+                                  size: 22,
+                                ),
+                              ))
+                      : const Icon(
+                          Icons.person,
+                          color: Colors.white,
+                          size: 22,
+                        ),
                 ),
               ),
             ),
           ),
-        ),
-        title: Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade200,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.grey.shade300, width: 1),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _ModeButton(
-                label: 'View',
-                icon: Icons.visibility_outlined,
-                isSelected: !_isSelectMode,
+
+          const SizedBox(width: 12),
+
+          // Search Bar
+          Expanded(
+            child: Container(
+              height: 44,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(22),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search or tap map...',
+                  hintStyle: TextStyle(
+                    color: Colors.grey[400],
+                    fontSize: 15,
+                  ),
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    color: Color(0xFF5B7C99),
+                    size: 20,
+                  ),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 20),
+                          onPressed: _clearSearch,
+                          color: Colors.grey[400],
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                ),
                 onTap: () {
-                  if (_isSelectMode) _toggleMode();
+                  setState(() => _showSearchResults = true);
                 },
               ),
-              _ModeButton(
-                label: 'Select',
-                icon: Icons.edit_outlined,
-                isSelected: _isSelectMode,
-                onTap: () {
-                  if (!_isSelectMode) _toggleMode();
-                },
-              ),
-            ],
+            ),
           ),
-        ),
-        actions: [
+
+          const SizedBox(width: 12),
+
+          // Filter Button (Placeholder for Phase 5)
           Container(
-            margin: const EdgeInsets.only(right: 12),
             decoration: BoxDecoration(
               color: const Color(0xFF5B7C99),
               borderRadius: BorderRadius.circular(10),
@@ -445,52 +603,205 @@ class _WorldMapScreenState extends State<WorldMapScreen>
               ],
             ),
             child: IconButton(
-              icon: const Icon(Icons.menu, color: Colors.white),
+              icon: const Icon(Icons.tune, color: Colors.white, size: 20),
+              tooltip: 'Filter',
+              onPressed: () {
+                // TODO: Open filter sheet (Phase 5)
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Filter coming in Phase 5!'),
+                    duration: Duration(seconds: 1),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // Menu Button
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF5B7C99),
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.12),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.menu, color: Colors.white, size: 20),
               tooltip: 'Menu',
               onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
             ),
           ),
         ],
       ),
-      endDrawer: _buildMenuDrawer(),
-      body: Column(
-        children: [
-          Expanded(
-            child: _loadingPolygons
-                ? const Center(
-                    child: CircularProgressIndicator(color: Color(0xFF5B7C99)),
-                  )
-                : ValueListenableBuilder<Box<dynamic>>(
-                    valueListenable: _visitedBox.listenable(
-                      keys: const [_visitedKey],
-                    ),
-                    builder: (context, box, _) {
-                      final visited = _readVisited(box);
-                      return _buildMap(visited);
-                    },
-                  ),
-          ),
-          ValueListenableBuilder<Box<dynamic>>(
-            valueListenable: _visitedBox.listenable(keys: const [_visitedKey]),
-            builder: (context, box, _) {
-              final visited = _readVisited(box);
-              return _GlassmorphicFooter(
-                visitedCodes: visited,
-                percentageAnimation: _percentageAnimation,
-                selectedContinent: _selectedContinent,
-                onContinentTap: (continent) {
-                  setState(() {
-                    if (_selectedContinent == continent) {
-                      _selectedContinent = null;
-                    } else {
-                      _selectedContinent = continent;
-                    }
-                  });
-                },
-              );
-            },
+    );
+  }
+
+  Widget _buildSearchResults() {
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 400),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
           ),
         ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_searchResults.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  Icon(Icons.search_off, size: 48, color: Colors.grey[300]),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No countries found',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: _searchResults.length,
+              separatorBuilder: (_, __) => Divider(
+                height: 1,
+                color: Colors.grey[200],
+              ),
+              itemBuilder: (context, index) {
+                final country = _searchResults[index];
+                final isVisited = _readVisited(_visitedBox).contains(country.code);
+
+                return ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: isVisited
+                          ? const Color(0xFF5B7C99)
+                          : Colors.grey[200],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Center(
+                      child: Text(
+                        CountriesData.getFlagEmoji(country.code),
+                        style: const TextStyle(fontSize: 24),
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    country.name,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: Text(
+                    country.code,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!isVisited)
+                        TextButton(
+                          onPressed: () {
+                            _quickAddCountry(country.code);
+                            _clearSearch();
+                          },
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            backgroundColor: const Color(0xFF5B7C99),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: const Text(
+                            'Add',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      const SizedBox(width: 8),
+                      const Icon(
+                        Icons.arrow_forward_ios,
+                        size: 14,
+                        color: Colors.grey,
+                      ),
+                    ],
+                  ),
+                  onTap: () {
+                    _clearSearch();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => CountryDetailScreen(
+                          countryCode: country.code,
+                          countryName: country.name,
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegend() {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 12,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _LegendItem(
+              color: const Color(0xFF5B7C99),
+              label: 'Visited',
+            ),
+            const SizedBox(width: 16),
+            _LegendItem(
+              color: const Color(0xFFEDE9E3),
+              label: 'Not Visited',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -577,8 +888,47 @@ class _WorldMapScreenState extends State<WorldMapScreen>
 
               const Spacer(),
 
+              // Stats section (moved from footer)
+              ValueListenableBuilder<Box<dynamic>>(
+                valueListenable: _visitedBox.listenable(keys: const [_visitedKey]),
+                builder: (context, box, _) {
+                  final visited = _readVisited(box);
+                  final total = CountriesData.totalCount;
+                  final pct = (visited.length / total * 100).toStringAsFixed(1);
+
+                  return Container(
+                    margin: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          '$pct% World Traveled',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${visited.length} / $total countries',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.8),
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+
               Padding(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(16),
                 child: Text(
                   'Travel Tracker v1.0',
                   style: TextStyle(
@@ -605,30 +955,20 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       final isVisited = visited.contains(code);
       final isHover = _hoverCode == code && !isVisited;
 
-      final country = CountriesData.findByCode(code);
-      final countryContinent = country?.continent;
-      final isFiltered =
-          _selectedContinent != null && countryContinent != _selectedContinent;
-
       Color fillColor;
       Color borderColor;
 
-      if (isFiltered) {
-        fillColor = const Color(0xFFF5F5F5).withOpacity(0.3);
-        borderColor = const Color(0xFFE0E0E0).withOpacity(0.3);
-      } else {
-        fillColor = isVisited
-            ? const Color(0xFF5B7C99)
-            : isHover
-            ? const Color(0xFF5B7C99).withOpacity(0.4)
-            : const Color(0xFFEDE9E3);
+      fillColor = isVisited
+          ? const Color(0xFF5B7C99)
+          : isHover
+          ? const Color(0xFF5B7C99).withOpacity(0.4)
+          : const Color(0xFFEDE9E3);
 
-        borderColor = isVisited
-            ? const Color(0xFF4A6B7F)
-            : isHover
-            ? const Color(0xFF5B7C99)
-            : const Color(0xFFD5CDC1);
-      }
+      borderColor = isVisited
+          ? const Color(0xFF4A6B7F)
+          : isHover
+          ? const Color(0xFF5B7C99)
+          : const Color(0xFFD5CDC1);
 
       for (final polygon in entry.value) {
         flutterPolygons.add(
@@ -647,50 +987,47 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     }
 
     return MouseRegion(
-      onHover: (evt) {
-        if (evt is PointerHoverEvent) {
-          final pos = evt.localPosition;
-          // Convert hover screen pos to LatLng via map; FlutterMap exposes pointer -> latlng via handlers
-          // but we already use onPointerHover in options. Keep this wrapper for web/desktop hovers.
-        }
-      },
       onExit: _handleHoverExit,
-      child: FlutterMap(
-        mapController: _mapController,
-        options: MapOptions(
-          initialCenter: _initialCenter,
-          initialZoom: 2.3,
-          minZoom: 1.6,
-          maxZoom: 10,
-          cameraConstraint: CameraConstraint.contain(bounds: _worldBounds),
-          interactionOptions: const InteractionOptions(
-            flags:
-                InteractiveFlag.pinchZoom |
-                InteractiveFlag.drag |
-                InteractiveFlag.doubleTapZoom |
-                InteractiveFlag.flingAnimation,
-            enableMultiFingerGestureRace: true,
-          ),
-          onTap: _handleTap,
-          onPointerHover: _handleHover,
-        ),
-        children: [
-          Container(color: const Color(0xFFB8D4E8)),
-          PolygonLayer(polygons: flutterPolygons),
-          if (_flashPoint != null)
-            CircleLayer(
-              circles: [
-                CircleMarker(
-                  point: _flashPoint!,
-                  radius: 8,
-                  useRadiusInMeter: false,
-                  color: const Color(0xFF5B7C99).withOpacity(0.6),
-                  borderColor: Colors.white,
-                  borderStrokeWidth: 2,
-                ),
-              ],
+      child: Listener(
+        onPointerMove: (_) => _onMapInteraction(),
+        onPointerDown: (_) => _onMapInteraction(),
+        child: FlutterMap(
+          mapController: _mapController,
+          options: MapOptions(
+            initialCenter: _initialCenter,
+            initialZoom: 2.3,
+            minZoom: 1.6,
+            maxZoom: 10,
+            cameraConstraint: CameraConstraint.contain(bounds: _worldBounds),
+            interactionOptions: const InteractionOptions(
+              flags:
+                  InteractiveFlag.pinchZoom |
+                  InteractiveFlag.drag |
+                  InteractiveFlag.doubleTapZoom |
+                  InteractiveFlag.flingAnimation,
+              enableMultiFingerGestureRace: true,
             ),
-        ],
+            onTap: _handleTap,
+            onPointerHover: _handleHover,
+          ),
+          children: [
+            Container(color: const Color(0xFFB8D4E8)),
+            PolygonLayer(polygons: flutterPolygons),
+            if (_flashPoint != null)
+              CircleLayer(
+                circles: [
+                  CircleMarker(
+                    point: _flashPoint!,
+                    radius: 8,
+                    useRadiusInMeter: false,
+                    color: const Color(0xFF5B7C99).withOpacity(0.6),
+                    borderColor: Colors.white,
+                    borderStrokeWidth: 2,
+                  ),
+                ],
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -761,204 +1098,43 @@ class _DrawerMenuItem extends StatelessWidget {
   }
 }
 
-// ------------------ Mode Button ------------------
-class _ModeButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _ModeButton({
-    required this.label,
-    required this.icon,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF5B7C99) : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: isSelected ? Colors.white : const Color(0xFF2C3E50),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: isSelected ? Colors.white : const Color(0xFF2C3E50),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ------------------ Footer ------------------
-class _GlassmorphicFooter extends StatelessWidget {
-  const _GlassmorphicFooter({
-    required this.visitedCodes,
-    required this.percentageAnimation,
-    required this.selectedContinent,
-    required this.onContinentTap,
-  });
-
-  final Set<String> visitedCodes;
-  final Animation<double> percentageAnimation;
-  final String? selectedContinent;
-  final Function(String) onContinentTap;
-
-  static const _continentColors = {
-    'Africa': Color(0xFFFFF8F0),
-    'Asia': Color(0xFFFFF0F0),
-    'Europe': Color(0xFFF0F8FF),
-    'North America': Color(0xFFF0FFF4),
-    'South America': Color(0xFFFFF4F0),
-    'Oceania': Color(0xFFF8F0FF),
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final continents = CountriesData.continents;
-    final grouped = CountriesData.byContinent;
-    final totalVisited = visitedCodes.length;
-    final grandTotal = CountriesData.totalCount;
-
-    return ClipRRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.85),
-            border: Border(
-              top: BorderSide(color: Colors.grey.shade200, width: 1),
-            ),
-          ),
-          padding: const EdgeInsets.all(10),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                AnimatedBuilder(
-                  animation: percentageAnimation,
-                  builder: (context, _) {
-                    final pct = percentageAnimation.value * 100;
-                    return Text(
-                      '${pct.toStringAsFixed(1)}% World Traveled · $totalVisited / $grandTotal',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF2C3E50),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 8),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: continents.map((continent) {
-                      final countries = grouped[continent] ?? [];
-                      final total = countries.length;
-                      final visitedInContinent = countries
-                          .where((c) => visitedCodes.contains(c.code))
-                          .length;
-                      return _ContinentChip(
-                        label: continent,
-                        visited: visitedInContinent,
-                        total: total,
-                        color: _continentColors[continent] ?? Colors.white,
-                        isSelected: selectedContinent == continent,
-                        onTap: () => onContinentTap(continent),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ContinentChip extends StatelessWidget {
-  const _ContinentChip({
-    required this.label,
-    required this.visited,
-    required this.total,
-    required this.color,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  final String label;
-  final int visited;
-  final int total;
+// ------------------ Legend Item ------------------
+class _LegendItem extends StatelessWidget {
   final Color color;
-  final bool isSelected;
-  final VoidCallback onTap;
+  final String label;
+
+  const _LegendItem({
+    required this.color,
+    required this.label,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final pct = total == 0 ? 0.0 : visited / total;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF5B7C99) : color,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? const Color(0xFF5B7C99) : Colors.grey.shade300,
-            width: 0.5,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: Colors.grey[400]!,
+              width: 0.5,
+            ),
           ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: isSelected ? Colors.white : const Color(0xFF2C3E50),
-              ),
-            ),
-            const SizedBox(width: 4),
-            Text(
-              '${(pct * 100).toStringAsFixed(0)}%',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-                color: isSelected ? Colors.white70 : Colors.grey.shade600,
-              ),
-            ),
-          ],
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF2C3E50),
+          ),
         ),
-      ),
+      ],
     );
   }
 }

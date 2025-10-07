@@ -214,6 +214,29 @@ class CountriesData {
     Country(name: 'Vanuatu', code: 'VU', continent: 'Oceania'),
   ];
 
+  /// Get flag emoji for country code
+  /// Converts ISO 3166-1 alpha-2 code to regional indicator symbols
+  static String getFlagEmoji(String countryCode) {
+    if (countryCode.length != 2) return '🏳️';
+    
+    final code = countryCode.toUpperCase();
+    
+    // Convert country code to flag emoji using regional indicator symbols
+    // A = 🇦 (U+1F1E6), B = 🇧 (U+1F1E7), etc.
+    final firstLetter = code.codeUnitAt(0);
+    final secondLetter = code.codeUnitAt(1);
+    
+    // Regional Indicator Symbol starts at U+1F1E6 (🇦)
+    // A is 65 in ASCII, so we calculate offset
+    const regionalIndicatorA = 0x1F1E6;
+    const asciiA = 0x41;
+    
+    final firstRegional = String.fromCharCode(regionalIndicatorA + (firstLetter - asciiA));
+    final secondRegional = String.fromCharCode(regionalIndicatorA + (secondLetter - asciiA));
+    
+    return firstRegional + secondRegional;
+  }
+
   /// Get countries grouped by continent
   static Map<String, List<Country>> get byContinent {
     final Map<String, List<Country>> grouped = {};
