@@ -1,5 +1,5 @@
 // lib/services/country_polygons.dart
-// Updated for Natural Earth GeoJSON format
+// Updated for Natural Earth GeoJSON format with Antarctica and Greenland support
 import 'dart:convert';
 
 import 'package:flutter/services.dart' show rootBundle;
@@ -29,8 +29,7 @@ class CountryPolygons {
 
       final code = _extractIsoCode(properties);
 
-      // Skip Antarctica unless we want to include it
-      // Remove this check to include Antarctica
+      // Include Antarctica (AQ) and Greenland (GL) now!
       if (code == null || code.isEmpty) {
         skippedCount++;
         continue;
@@ -70,7 +69,23 @@ class CountryPolygons {
       byCode.putIfAbsent(code, () => <CountryPolygon>[]).addAll(polygons);
     }
 
-    print('✅ Loaded ${byCode.length} countries (skipped $skippedCount)');
+    print(
+      '✅ Loaded ${byCode.length} countries/territories (skipped $skippedCount)',
+    );
+
+    // Log if Antarctica and Greenland were loaded
+    if (byCode.containsKey('AQ')) {
+      print('🐧 Antarctica (AQ) loaded successfully!');
+    } else {
+      print('⚠️ Antarctica (AQ) not found in GeoJSON');
+    }
+
+    if (byCode.containsKey('GL')) {
+      print('🇬🇱 Greenland (GL) loaded successfully!');
+    } else {
+      print('⚠️ Greenland (GL) not found in GeoJSON');
+    }
+
     return CountryPolygons._(byCode);
   }
 
@@ -177,7 +192,7 @@ class CountryPolygons {
     return _cachedNameMap ??= {
       for (final country in CountriesData.allCountries)
         country.name.toLowerCase(): country.code.toUpperCase(),
-      // Add some common name variations
+      // Add common name variations
       'united states of america': 'US',
       'united kingdom': 'GB',
       'russia': 'RU',
@@ -186,6 +201,10 @@ class CountryPolygons {
       'czech republic': 'CZ',
       'democratic republic of the congo': 'CD',
       'republic of congo': 'CG',
+      // Special territories
+      'antarctica': 'AQ',
+      'greenland': 'GL',
+      'kalaallit nunaat': 'GL', // Greenlandic name
     };
   }
 

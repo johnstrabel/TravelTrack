@@ -15,7 +15,9 @@ import '../data/countries.dart';
 import '../services/country_polygons.dart';
 import '../models/country.dart';
 import '../models/country_status.dart';
+import '../models/filter_mode.dart';
 import '../widgets/country_status_modal.dart';
+import '../widgets/filter_sheet.dart';
 import 'country_list_screen.dart';
 import 'country_detail_screen.dart';
 import 'profile_screen.dart';
@@ -58,6 +60,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
 
   // Modes & filters
   bool _isSelectMode = false;
+  FilterMode _filterMode = FilterMode.visited;
 
   // Auto-hide UI
   bool _showTopBar = true;
@@ -400,18 +403,28 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     final visited = _readVisited(_visitedBox);
 
     if (status == null) {
+      // Remove status completely
       statuses.remove(countryCode);
       visited.remove(countryCode);
     } else {
+      // Set the status
       statuses[countryCode] = status.name;
-      if (!visited.contains(countryCode)) {
-        visited.add(countryCode);
+
+      // CRITICAL: Only add to visited list if it's 'been' or 'lived' (NOT bucketlist)
+      if (status == CountryStatus.been || status == CountryStatus.lived) {
+        if (!visited.contains(countryCode)) {
+          visited.add(countryCode);
+        }
+      } else {
+        // If changing to bucketlist, remove from visited count
+        visited.remove(countryCode);
       }
     }
 
     _writeStatuses(statuses);
     _writeVisited(visited);
 
+    // Recalculate percentage based ONLY on visited (been + lived)
     final newPct = visited.length / CountriesData.totalCount;
     _percentageController.reset();
     _percentageAnimation =
@@ -674,10 +687,15 @@ class _WorldMapScreenState extends State<WorldMapScreen>
               tooltip: 'Filter',
               onPressed: () {
                 HapticFeedback.lightImpact();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Filter coming in Phase 3!'),
-                    duration: Duration(seconds: 1),
+                showModalBottomSheet(
+                  context: context,
+                  backgroundColor: Colors.transparent,
+                  isScrollControlled: true,
+                  builder: (context) => FilterSheet(
+                    currentMode: _filterMode,
+                    onModeSelected: (mode) {
+                      setState(() => _filterMode = mode);
+                    },
                   ),
                 );
               },
@@ -943,10 +961,20 @@ class _WorldMapScreenState extends State<WorldMapScreen>
               const Spacer(),
               ValueListenableBuilder<Box<dynamic>>(
                 valueListenable: _visitedBox.listenable(
-                  keys: const [_visitedKey],
+                  keys: const [_visitedKey, _statusKey],
                 ),
                 builder: (context, box, _) {
                   final visited = _readVisited(box);
+                  final statuses = _readStatuses(box);
+
+                  // Count bucket list countries separately
+                  int bucketListCount = 0;
+                  for (final entry in statuses.entries) {
+                    if (entry.value == 'bucketlist') {
+                      bucketListCount++;
+                    }
+                  }
+
                   final total = CountriesData.totalCount;
                   final pct = (visited.length / total * 100).toStringAsFixed(1);
 
@@ -960,7 +988,9 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                     child: Column(
                       children: [
                         Text(
-                          '$pct% World Traveled',
+                          _filterMode == FilterMode.bucketList
+                              ? 'Bucket List Countries'
+                              : '$pct% World Traveled',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 18,
@@ -969,7 +999,9 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '${visited.length} / $total countries',
+                          _filterMode == FilterMode.bucketList
+                              ? '$bucketListCount countries'
+                              : '${visited.length} / $total countries',
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.8),
                             fontSize: 14,
@@ -1006,44 +1038,81 @@ class _WorldMapScreenState extends State<WorldMapScreen>
 
     for (final entry in polygons.polygonsByCode.entries) {
       final code = entry.key;
-      final isVisited = visited.contains(code);
+      final statusString = statuses[code];
       final isHover = _hoverCode == code;
 
-      Color fillColor;
-      Color borderColor;
+      // Determine if country should be shown based on filter mode
+      bool shouldShow = false;
+      Color fillColor = const Color(0xFFE0E0E0);
+      Color borderColor = const Color(0xFFBDBDBD);
 
-      if (isVisited) {
-        final statusString = statuses[code];
-        CountryStatus? status;
-
-        if (statusString != null) {
-          try {
-            status = CountryStatus.values.firstWhere(
-              (s) => s.name == statusString,
-            );
-          } catch (_) {
-            status = null;
-          }
+      // Parse status
+      CountryStatus? status;
+      if (statusString != null) {
+        try {
+          status = CountryStatus.values.firstWhere(
+            (s) => s.name == statusString,
+          );
+        } catch (_) {
+          status = null;
         }
-
-        if (status == CountryStatus.bucketlist) {
-          fillColor = const Color(0xFFE94B3C);
-          borderColor = const Color(0xFFD43B2C);
-        } else if (status == CountryStatus.lived) {
-          fillColor = const Color(0xFFF5A623);
-          borderColor = const Color(0xFFE59613);
-        } else {
-          fillColor = const Color(0xFF7ED321);
-          borderColor = const Color(0xFF6EC311);
-        }
-      } else if (isHover) {
-        fillColor = const Color(0xFF5B7C99).withOpacity(0.4);
-        borderColor = const Color(0xFF5B7C99);
-      } else {
-        fillColor = const Color(0xFFEDE9E3);
-        borderColor = const Color(0xFFD5CDC1);
       }
 
+      // Apply filter logic
+      switch (_filterMode) {
+        case FilterMode.visited:
+          // Show only 'been' and 'lived' countries
+          if (status == CountryStatus.been || status == CountryStatus.lived) {
+            shouldShow = true;
+            if (status == CountryStatus.lived) {
+              fillColor = const Color(0xFFF5A623); // Yellow for lived
+              borderColor = const Color(0xFFE69515);
+            } else {
+              fillColor = const Color(0xFF7ED321); // Green for been
+              borderColor = const Color(0xFF6BC218);
+            }
+          }
+          break;
+
+        case FilterMode.trips:
+          // TODO: Implement trip coloring in Phase 3B
+          // For now, show all visited countries in blue
+          if (status == CountryStatus.been || status == CountryStatus.lived) {
+            shouldShow = true;
+            fillColor = const Color(0xFF5B7C99);
+            borderColor = const Color(0xFF4A6A85);
+          }
+          break;
+
+        case FilterMode.years:
+          // TODO: Implement year coloring in Phase 3C
+          // For now, show all visited countries in purple
+          if (status == CountryStatus.been || status == CountryStatus.lived) {
+            shouldShow = true;
+            fillColor = const Color(0xFF9C27B0);
+            borderColor = const Color(0xFF7B1FA2);
+          }
+          break;
+
+        case FilterMode.bucketList:
+          // Show ONLY bucket list countries in red
+          if (status == CountryStatus.bucketlist) {
+            shouldShow = true;
+            fillColor = const Color(0xFFE94B3C); // Red
+            borderColor = const Color(0xFFD43B2C);
+          }
+          break;
+      }
+
+      // Skip if shouldn't show
+      if (!shouldShow) continue;
+
+      // Apply hover effect
+      if (isHover) {
+        fillColor = fillColor.withOpacity(0.7);
+      }
+
+      // Create polygons for this country
       for (final polygon in entry.value) {
         flutterPolygons.add(
           Polygon(

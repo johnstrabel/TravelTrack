@@ -1,7 +1,9 @@
+// lib/data/countries.dart
 import '../models/country.dart';
 
 /// Complete dataset of world countries organized by continent
 /// Uses ISO 3166-1 alpha-2 codes for consistency
+/// Updated to include Antarctica (AQ) and Greenland (GL) as special territories
 class CountriesData {
   static final List<Country> allCountries = [
     // Africa (54 countries)
@@ -17,7 +19,11 @@ class CountriesData {
     Country(name: 'Chad', code: 'TD', continent: 'Africa'),
     Country(name: 'Comoros', code: 'KM', continent: 'Africa'),
     Country(name: 'Congo', code: 'CG', continent: 'Africa'),
-    Country(name: 'Democratic Republic of the Congo', code: 'CD', continent: 'Africa'),
+    Country(
+      name: 'Democratic Republic of the Congo',
+      code: 'CD',
+      continent: 'Africa',
+    ),
     Country(name: 'Djibouti', code: 'DJ', continent: 'Africa'),
     Country(name: 'Egypt', code: 'EG', continent: 'Africa'),
     Country(name: 'Equatorial Guinea', code: 'GQ', continent: 'Africa'),
@@ -158,8 +164,12 @@ class CountriesData {
     Country(name: 'United Kingdom', code: 'GB', continent: 'Europe'),
     Country(name: 'Vatican City', code: 'VA', continent: 'Europe'),
 
-    // North America (23 countries)
-    Country(name: 'Antigua and Barbuda', code: 'AG', continent: 'North America'),
+    // North America (24 countries + Greenland territory)
+    Country(
+      name: 'Antigua and Barbuda',
+      code: 'AG',
+      continent: 'North America',
+    ),
     Country(name: 'Bahamas', code: 'BS', continent: 'North America'),
     Country(name: 'Barbados', code: 'BB', continent: 'North America'),
     Country(name: 'Belize', code: 'BZ', continent: 'North America'),
@@ -170,6 +180,11 @@ class CountriesData {
     Country(name: 'Dominican Republic', code: 'DO', continent: 'North America'),
     Country(name: 'El Salvador', code: 'SV', continent: 'North America'),
     Country(name: 'Grenada', code: 'GD', continent: 'North America'),
+    Country(
+      name: 'Greenland',
+      code: 'GL',
+      continent: 'North America',
+    ), // Territory of Denmark
     Country(name: 'Guatemala', code: 'GT', continent: 'North America'),
     Country(name: 'Haiti', code: 'HT', continent: 'North America'),
     Country(name: 'Honduras', code: 'HN', continent: 'North America'),
@@ -177,10 +192,22 @@ class CountriesData {
     Country(name: 'Mexico', code: 'MX', continent: 'North America'),
     Country(name: 'Nicaragua', code: 'NI', continent: 'North America'),
     Country(name: 'Panama', code: 'PA', continent: 'North America'),
-    Country(name: 'Saint Kitts and Nevis', code: 'KN', continent: 'North America'),
+    Country(
+      name: 'Saint Kitts and Nevis',
+      code: 'KN',
+      continent: 'North America',
+    ),
     Country(name: 'Saint Lucia', code: 'LC', continent: 'North America'),
-    Country(name: 'Saint Vincent and the Grenadines', code: 'VC', continent: 'North America'),
-    Country(name: 'Trinidad and Tobago', code: 'TT', continent: 'North America'),
+    Country(
+      name: 'Saint Vincent and the Grenadines',
+      code: 'VC',
+      continent: 'North America',
+    ),
+    Country(
+      name: 'Trinidad and Tobago',
+      code: 'TT',
+      continent: 'North America',
+    ),
     Country(name: 'United States', code: 'US', continent: 'North America'),
 
     // South America (12 countries)
@@ -212,28 +239,38 @@ class CountriesData {
     Country(name: 'Tonga', code: 'TO', continent: 'Oceania'),
     Country(name: 'Tuvalu', code: 'TV', continent: 'Oceania'),
     Country(name: 'Vanuatu', code: 'VU', continent: 'Oceania'),
+
+    // Antarctica (special territory)
+    Country(name: 'Antarctica', code: 'AQ', continent: 'Antarctica'),
   ];
 
   /// Get flag emoji for country code
   /// Converts ISO 3166-1 alpha-2 code to regional indicator symbols
   static String getFlagEmoji(String countryCode) {
     if (countryCode.length != 2) return '🏳️';
-    
+
     final code = countryCode.toUpperCase();
-    
+
+    // Special case for Antarctica - use penguin emoji
+    if (code == 'AQ') return '🐧';
+
     // Convert country code to flag emoji using regional indicator symbols
     // A = 🇦 (U+1F1E6), B = 🇧 (U+1F1E7), etc.
     final firstLetter = code.codeUnitAt(0);
     final secondLetter = code.codeUnitAt(1);
-    
+
     // Regional Indicator Symbol starts at U+1F1E6 (🇦)
     // A is 65 in ASCII, so we calculate offset
     const regionalIndicatorA = 0x1F1E6;
     const asciiA = 0x41;
-    
-    final firstRegional = String.fromCharCode(regionalIndicatorA + (firstLetter - asciiA));
-    final secondRegional = String.fromCharCode(regionalIndicatorA + (secondLetter - asciiA));
-    
+
+    final firstRegional = String.fromCharCode(
+      regionalIndicatorA + (firstLetter - asciiA),
+    );
+    final secondRegional = String.fromCharCode(
+      regionalIndicatorA + (secondLetter - asciiA),
+    );
+
     return firstRegional + secondRegional;
   }
 
@@ -250,18 +287,19 @@ class CountriesData {
     return grouped;
   }
 
-  /// Get total country count
+  /// Get total country count (including territories)
   static int get totalCount => allCountries.length;
 
   /// Get continent names in display order
   static List<String> get continents => [
-        'Africa',
-        'Asia',
-        'Europe',
-        'North America',
-        'South America',
-        'Oceania',
-      ];
+    'Africa',
+    'Asia',
+    'Europe',
+    'North America',
+    'South America',
+    'Oceania',
+    'Antarctica', // Added as 7th continent
+  ];
 
   /// Find country by code
   static Country? findByCode(String code) {
