@@ -8,6 +8,7 @@ class CountryStatusModal extends StatelessWidget {
   final String countryName;
   final CountryStatus? currentStatus;
   final Function(CountryStatus?) onStatusSelected;
+  final VoidCallback? onViewDetails;
 
   const CountryStatusModal({
     super.key,
@@ -15,6 +16,7 @@ class CountryStatusModal extends StatelessWidget {
     required this.countryName,
     required this.currentStatus,
     required this.onStatusSelected,
+    this.onViewDetails,
   });
 
   @override
@@ -22,116 +24,157 @@ class CountryStatusModal extends StatelessWidget {
     final flag = CountriesData.getFlagEmoji(countryCode);
 
     return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.75,
+      ),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Handle bar
-            Container(
-              margin: const EdgeInsets.only(top: 12, bottom: 8),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
 
-            // Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-              child: Row(
-                children: [
-                  Text(
-                    flag,
-                    style: const TextStyle(fontSize: 32),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          countryName,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF2C3E50),
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+                child: Row(
+                  children: [
+                    Text(flag, style: const TextStyle(fontSize: 32)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            countryName,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF2C3E50),
+                            ),
                           ),
-                        ),
+                          Text(
+                            'Select your status',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const Divider(height: 1),
+
+              // Status options
+              _StatusOption(
+                status: CountryStatus.bucketlist,
+                label: 'Bucket List',
+                emoji: '🔴',
+                description: 'Countries you want to visit',
+                isSelected: currentStatus == CountryStatus.bucketlist,
+                onTap: () {
+                  onStatusSelected(CountryStatus.bucketlist);
+                  Navigator.pop(context);
+                },
+              ),
+
+              _StatusOption(
+                status: CountryStatus.been,
+                label: 'Been There',
+                emoji: '🟢',
+                description: 'Countries you\'ve visited',
+                isSelected: currentStatus == CountryStatus.been,
+                onTap: () {
+                  onStatusSelected(CountryStatus.been);
+                  Navigator.pop(context);
+                },
+              ),
+
+              _StatusOption(
+                status: CountryStatus.lived,
+                label: 'Lived There',
+                emoji: '🟡',
+                description: 'Countries where you\'ve lived (6+ months)',
+                isSelected: currentStatus == CountryStatus.lived,
+                onTap: () {
+                  onStatusSelected(CountryStatus.lived);
+                  Navigator.pop(context);
+                },
+              ),
+
+              // Remove status option
+              if (currentStatus != null)
+                _StatusOption(
+                  status: null,
+                  label: 'Remove Status',
+                  emoji: '❌',
+                  description: 'Clear this country\'s status',
+                  isSelected: false,
+                  onTap: () {
+                    onStatusSelected(null);
+                    Navigator.pop(context);
+                  },
+                ),
+
+              const Divider(height: 1, thickness: 1),
+
+              // View Details Button
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      if (onViewDetails != null) {
+                        onViewDetails!();
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF5B7C99),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.info_outline, size: 20),
+                        const SizedBox(width: 8),
                         Text(
-                          'Select your status',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
+                          'View Country Details',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-
-            const Divider(height: 1),
-
-            // Status options
-            _StatusOption(
-              status: CountryStatus.bucketlist,
-              label: 'Bucket List',
-              emoji: '🔴',
-              description: 'Countries you want to visit',
-              isSelected: currentStatus == CountryStatus.bucketlist,
-              onTap: () {
-                onStatusSelected(CountryStatus.bucketlist);
-                Navigator.pop(context);
-              },
-            ),
-
-            _StatusOption(
-              status: CountryStatus.been,
-              label: 'Been There',
-              emoji: '🟢',
-              description: 'Countries you\'ve visited',
-              isSelected: currentStatus == CountryStatus.been,
-              onTap: () {
-                onStatusSelected(CountryStatus.been);
-                Navigator.pop(context);
-              },
-            ),
-
-            _StatusOption(
-              status: CountryStatus.lived,
-              label: 'Lived There',
-              emoji: '🟡',
-              description: 'Countries where you\'ve lived (6+ months)',
-              isSelected: currentStatus == CountryStatus.lived,
-              onTap: () {
-                onStatusSelected(CountryStatus.lived);
-                Navigator.pop(context);
-              },
-            ),
-
-            // Remove status option
-            if (currentStatus != null)
-              _StatusOption(
-                status: null,
-                label: 'Remove Status',
-                emoji: '❌',
-                description: 'Clear this country\'s status',
-                isSelected: false,
-                onTap: () {
-                  onStatusSelected(null);
-                  Navigator.pop(context);
-                },
-              ),
-
-            const SizedBox(height: 16),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -167,7 +210,9 @@ class _StatusOption extends StatelessWidget {
             color: isSelected ? const Color(0xFF5B7C99).withOpacity(0.1) : null,
             border: Border(
               left: BorderSide(
-                color: isSelected ? const Color(0xFF5B7C99) : Colors.transparent,
+                color: isSelected
+                    ? const Color(0xFF5B7C99)
+                    : Colors.transparent,
                 width: 4,
               ),
             ),
@@ -175,10 +220,7 @@ class _StatusOption extends StatelessWidget {
           child: Row(
             children: [
               // Emoji
-              Text(
-                emoji,
-                style: const TextStyle(fontSize: 28),
-              ),
+              Text(emoji, style: const TextStyle(fontSize: 28)),
               const SizedBox(width: 16),
 
               // Label and description
@@ -199,10 +241,7 @@ class _StatusOption extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       description,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey[600],
-                      ),
+                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                     ),
                   ],
                 ),

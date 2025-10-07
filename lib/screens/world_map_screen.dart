@@ -33,6 +33,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   // Hive keys
   static const _visitedKey = 'codes';
+  static const _statusKey = 'country_status';
 
   // UI timings
   static const _flashDuration = Duration(milliseconds: 450);
@@ -78,10 +79,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
 
   // Map bounds & start
   static const _initialCenter = LatLng(22, 0.0);
-  static final LatLngBounds _worldBounds = LatLngBounds(
-    const LatLng(-58, -180),
-    const LatLng(84, 180),
-  );
 
   @override
   void initState() {
@@ -98,7 +95,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
-    // Safe default to avoid late-init nulls before polygons load
     _percentageAnimation = Tween<double>(begin: 0.0, end: 0.0).animate(
       CurvedAnimation(
         parent: _percentageController,
@@ -135,7 +131,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     super.dispose();
   }
 
-  // Keep avatar fresh when returning to foreground
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
@@ -180,7 +175,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       final supabase = Supabase.instance.client;
       final userId = supabase.auth.currentUser?.id;
 
-      // Try fresh from Supabase first
       if (userId != null) {
         final profile = await supabase
             .from('users')
@@ -198,7 +192,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         }
       }
 
-      // Fall back to cached
       final cachedUrl = _profileBox?.get('profile_pic_url') as String?;
       if (cachedUrl != null && cachedUrl.isNotEmpty) {
         print('📸 Using cached profile pic URL');
@@ -210,10 +203,9 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     }
   }
 
-  // ---------- Search functionality ----------
   void _onSearchChanged() {
     final query = _searchController.text.trim().toLowerCase();
-    
+
     if (query.isEmpty) {
       setState(() {
         _showSearchResults = false;
@@ -223,9 +215,11 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     }
 
     final results = CountriesData.allCountries
-        .where((country) =>
-            country.name.toLowerCase().contains(query) ||
-            country.code.toLowerCase().contains(query))
+        .where(
+          (country) =>
+              country.name.toLowerCase().contains(query) ||
+              country.code.toLowerCase().contains(query),
+        )
         .take(10)
         .toList();
 
@@ -244,6 +238,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   }
 
   void _quickAddCountry(String code) {
+    HapticFeedback.lightImpact();
     _toggleCountry(code);
     final country = CountriesData.findByCode(code);
     if (country != null) {
@@ -261,10 +256,9 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     }
   }
 
-  // ---------- Auto-hide UI ----------
   void _onMapInteraction() {
     _uiHideTimer?.cancel();
-    
+
     setState(() {
       _showTopBar = false;
       _showLegend = false;
@@ -279,7 +273,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     });
   }
 
-  // ---------- Visited persistence helpers ----------
   Set<String> _readVisited(Box<dynamic> box) {
     final raw = box.get(_visitedKey);
     if (raw is List) {
@@ -296,6 +289,18 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     _visitedBox.put(_visitedKey, normalized);
   }
 
+  Map<String, String> _readStatuses(Box<dynamic> box) {
+    final raw = box.get(_statusKey);
+    if (raw is Map) {
+      return Map<String, String>.from(raw);
+    }
+    return {};
+  }
+
+  void _writeStatuses(Map<String, String> statuses) {
+    _visitedBox.put(_statusKey, statuses);
+  }
+
   void _toggleCountry(String code) {
     final visited = _readVisited(_visitedBox);
     final wasVisited = visited.contains(code);
@@ -306,7 +311,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     }
     _writeVisited(visited);
 
-    // Animate percentage from current value to new value
     final newPct = visited.length / CountriesData.totalCount;
     _percentageController.reset();
     _percentageAnimation =
@@ -319,7 +323,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     _percentageController.forward();
   }
 
-  // ---------- Map interactions ----------
   void _handleTap(TapPosition position, LatLng latLng) {
     final polys = _countryPolygons;
     if (polys == null) return;
@@ -330,8 +333,9 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     final country = CountriesData.findByCode(code);
     if (country == null) return;
 
+    HapticFeedback.lightImpact();
+
     if (_isSelectMode) {
-      // In select mode: toggle visited status with flash animation
       _triggerFlash(latLng);
       _toggleCountry(code);
 
@@ -346,17 +350,24 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         ),
       );
     } else {
-      // Normal mode: show status modal
       _showCountryStatusModal(country);
     }
   }
 
-  // Show the status modal when tapping a country
   void _showCountryStatusModal(Country country) {
-    // Get current status (for now, we'll just check if visited)
-    // TODO: Later we'll store actual status in Hive/Supabase
-    final visited = _readVisited(_visitedBox);
-    final currentStatus = visited.contains(country.code) ? CountryStatus.been : null;
+    final statuses = _readStatuses(_visitedBox);
+    final statusString = statuses[country.code];
+
+    CountryStatus? currentStatus;
+    if (statusString != null) {
+      try {
+        currentStatus = CountryStatus.values.firstWhere(
+          (s) => s.name == statusString,
+        );
+      } catch (_) {
+        currentStatus = null;
+      }
+    }
 
     showModalBottomSheet(
       context: context,
@@ -367,50 +378,57 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         countryName: country.name,
         currentStatus: currentStatus,
         onStatusSelected: (status) {
+          HapticFeedback.mediumImpact();
           _handleStatusSelection(country.code, status);
+        },
+        onViewDetails: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => CountryDetailScreen(
+                countryCode: country.code,
+                countryName: country.name,
+              ),
+            ),
+          );
         },
       ),
     );
   }
 
-  // Handle status selection from modal
   void _handleStatusSelection(String countryCode, CountryStatus? status) {
+    final statuses = _readStatuses(_visitedBox);
     final visited = _readVisited(_visitedBox);
-    
+
     if (status == null) {
-      // Remove status
+      statuses.remove(countryCode);
       visited.remove(countryCode);
     } else {
-      // Add status (for now just mark as visited)
-      // TODO: Store actual status value in Hive/Supabase later
+      statuses[countryCode] = status.name;
       if (!visited.contains(countryCode)) {
         visited.add(countryCode);
       }
     }
-    
+
+    _writeStatuses(statuses);
     _writeVisited(visited);
 
-    // Animate percentage update
     final newPct = visited.length / CountriesData.totalCount;
     _percentageController.reset();
-    _percentageAnimation = Tween<double>(
-      begin: _percentageAnimation.value,
-      end: newPct,
-    ).animate(
-      CurvedAnimation(
-        parent: _percentageController,
-        curve: Curves.easeOutCubic,
-      ),
-    );
+    _percentageAnimation =
+        Tween<double>(begin: _percentageAnimation.value, end: newPct).animate(
+          CurvedAnimation(
+            parent: _percentageController,
+            curve: Curves.easeOutCubic,
+          ),
+        );
     _percentageController.forward();
 
-    // Show confirmation
     if (mounted) {
       final country = CountriesData.findByCode(countryCode);
-      final statusText = status == null 
+      final statusText = status == null
           ? 'Status removed'
           : '${_getStatusLabel(status)} selected';
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${country?.name}: $statusText'),
@@ -421,17 +439,14 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     }
   }
 
-  // Helper to get status label
   String _getStatusLabel(CountryStatus status) {
     switch (status) {
       case CountryStatus.bucketlist:
-        return 'Want to Visit';
+        return 'Bucket List';
       case CountryStatus.been:
         return 'Been There';
       case CountryStatus.lived:
         return 'Lived There';
-      case CountryStatus.lived:
-        return 'Living Here';
     }
   }
 
@@ -471,7 +486,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     });
   }
 
-  // ---------- UI ----------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -479,22 +493,22 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       backgroundColor: const Color(0xFFB8D4E8),
       body: GestureDetector(
         onTap: () {
-          // Dismiss search results when tapping outside
           if (_showSearchResults) {
             setState(() => _showSearchResults = false);
           }
         },
         child: Stack(
           children: [
-            // Map (Full bleed)
             Positioned.fill(
               child: _loadingPolygons
                   ? const Center(
-                      child: CircularProgressIndicator(color: Color(0xFF5B7C99)),
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF5B7C99),
+                      ),
                     )
                   : ValueListenableBuilder<Box<dynamic>>(
                       valueListenable: _visitedBox.listenable(
-                        keys: const [_visitedKey],
+                        keys: const [_visitedKey, _statusKey],
                       ),
                       builder: (context, box, _) {
                         final visited = _readVisited(box);
@@ -502,8 +516,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                       },
                     ),
             ),
-
-            // Top Bar (Auto-hide)
             AnimatedPositioned(
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeInOut,
@@ -512,8 +524,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
               right: 0,
               child: _buildTopBar(),
             ),
-
-            // Search Results Dropdown
             if (_showSearchResults)
               Positioned(
                 top: MediaQuery.of(context).padding.top + 64,
@@ -521,8 +531,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                 right: 16,
                 child: _buildSearchResults(),
               ),
-
-            // Legend (Auto-hide, bottom)
             AnimatedPositioned(
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeInOut,
@@ -550,20 +558,16 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            Colors.white,
-            Colors.white.withOpacity(0.0),
-          ],
+          colors: [Colors.white, Colors.white.withOpacity(0.0)],
         ),
       ),
       child: Row(
         children: [
-          // Profile Avatar
           GestureDetector(
             onTap: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ProfileScreen()),
-              );
+              await Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
               _loadProfilePicture();
             },
             child: Container(
@@ -603,19 +607,12 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                                   size: 22,
                                 ),
                               ))
-                      : const Icon(
-                          Icons.person,
-                          color: Colors.white,
-                          size: 22,
-                        ),
+                      : const Icon(Icons.person, color: Colors.white, size: 22),
                 ),
               ),
             ),
           ),
-
           const SizedBox(width: 12),
-
-          // Search Bar
           Expanded(
             child: Container(
               height: 44,
@@ -634,10 +631,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                 controller: _searchController,
                 decoration: InputDecoration(
                   hintText: 'Search or tap map...',
-                  hintStyle: TextStyle(
-                    color: Colors.grey[400],
-                    fontSize: 15,
-                  ),
+                  hintStyle: TextStyle(color: Colors.grey[400], fontSize: 15),
                   prefixIcon: const Icon(
                     Icons.search,
                     color: Color(0xFF5B7C99),
@@ -662,10 +656,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
               ),
             ),
           ),
-
           const SizedBox(width: 12),
-
-          // Filter Button (Placeholder for Phase 3)
           Container(
             decoration: BoxDecoration(
               color: const Color(0xFF5B7C99),
@@ -682,7 +673,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
               icon: const Icon(Icons.tune, color: Colors.white, size: 20),
               tooltip: 'Filter',
               onPressed: () {
-                // TODO: Open filter sheet (Phase 3)
+                HapticFeedback.lightImpact();
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Filter coming in Phase 3!'),
@@ -692,10 +683,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
               },
             ),
           ),
-
           const SizedBox(width: 8),
-
-          // Menu Button
           Container(
             decoration: BoxDecoration(
               color: const Color(0xFF5B7C99),
@@ -711,7 +699,10 @@ class _WorldMapScreenState extends State<WorldMapScreen>
             child: IconButton(
               icon: const Icon(Icons.menu, color: Colors.white, size: 20),
               tooltip: 'Menu',
-              onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
+              onPressed: () {
+                HapticFeedback.lightImpact();
+                _scaffoldKey.currentState?.openEndDrawer();
+              },
             ),
           ),
         ],
@@ -745,10 +736,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                   const SizedBox(height: 12),
                   Text(
                     'No countries found',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 15,
-                    ),
+                    style: TextStyle(color: Colors.grey[600], fontSize: 15),
                   ),
                 ],
               ),
@@ -758,13 +746,13 @@ class _WorldMapScreenState extends State<WorldMapScreen>
               shrinkWrap: true,
               padding: const EdgeInsets.symmetric(vertical: 8),
               itemCount: _searchResults.length,
-              separatorBuilder: (_, __) => Divider(
-                height: 1,
-                color: Colors.grey[200],
-              ),
+              separatorBuilder: (_, __) =>
+                  Divider(height: 1, color: Colors.grey[200]),
               itemBuilder: (context, index) {
                 final country = _searchResults[index];
-                final isVisited = _readVisited(_visitedBox).contains(country.code);
+                final isVisited = _readVisited(
+                  _visitedBox,
+                ).contains(country.code);
 
                 return ListTile(
                   leading: Container(
@@ -792,10 +780,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                   ),
                   subtitle: Text(
                     country.code,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                   ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -867,15 +852,11 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _LegendItem(
-              color: const Color(0xFF5B7C99),
-              label: 'Visited',
-            ),
-            const SizedBox(width: 16),
-            _LegendItem(
-              color: const Color(0xFFEDE9E3),
-              label: 'Not Visited',
-            ),
+            _LegendItem(color: const Color(0xFF7ED321), label: 'Been'),
+            const SizedBox(width: 12),
+            _LegendItem(color: const Color(0xFFF5A623), label: 'Lived'),
+            const SizedBox(width: 12),
+            _LegendItem(color: const Color(0xFFE94B3C), label: 'Bucket'),
           ],
         ),
       ),
@@ -895,7 +876,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         child: SafeArea(
           child: Column(
             children: [
-              // Header
               Container(
                 padding: const EdgeInsets.all(24),
                 child: Row(
@@ -924,7 +904,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
               ),
               const Divider(color: Colors.white24, height: 1),
               const SizedBox(height: 16),
-
               _DrawerMenuItem(
                 icon: Icons.people,
                 title: 'Friends',
@@ -961,12 +940,11 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                   );
                 },
               ),
-
               const Spacer(),
-
-              // Stats section (moved from footer)
               ValueListenableBuilder<Box<dynamic>>(
-                valueListenable: _visitedBox.listenable(keys: const [_visitedKey]),
+                valueListenable: _visitedBox.listenable(
+                  keys: const [_visitedKey],
+                ),
                 builder: (context, box, _) {
                   final visited = _readVisited(box);
                   final total = CountriesData.totalCount;
@@ -1002,7 +980,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                   );
                 },
               ),
-
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Text(
@@ -1024,27 +1001,48 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     final polygons = _countryPolygons;
     if (polygons == null) return const SizedBox.shrink();
 
+    final statuses = _readStatuses(_visitedBox);
     final flutterPolygons = <Polygon>[];
 
     for (final entry in polygons.polygonsByCode.entries) {
       final code = entry.key;
       final isVisited = visited.contains(code);
-      final isHover = _hoverCode == code && !isVisited;
+      final isHover = _hoverCode == code;
 
       Color fillColor;
       Color borderColor;
 
-      fillColor = isVisited
-          ? const Color(0xFF5B7C99)
-          : isHover
-          ? const Color(0xFF5B7C99).withOpacity(0.4)
-          : const Color(0xFFEDE9E3);
+      if (isVisited) {
+        final statusString = statuses[code];
+        CountryStatus? status;
 
-      borderColor = isVisited
-          ? const Color(0xFF4A6B7F)
-          : isHover
-          ? const Color(0xFF5B7C99)
-          : const Color(0xFFD5CDC1);
+        if (statusString != null) {
+          try {
+            status = CountryStatus.values.firstWhere(
+              (s) => s.name == statusString,
+            );
+          } catch (_) {
+            status = null;
+          }
+        }
+
+        if (status == CountryStatus.bucketlist) {
+          fillColor = const Color(0xFFE94B3C);
+          borderColor = const Color(0xFFD43B2C);
+        } else if (status == CountryStatus.lived) {
+          fillColor = const Color(0xFFF5A623);
+          borderColor = const Color(0xFFE59613);
+        } else {
+          fillColor = const Color(0xFF7ED321);
+          borderColor = const Color(0xFF6EC311);
+        }
+      } else if (isHover) {
+        fillColor = const Color(0xFF5B7C99).withOpacity(0.4);
+        borderColor = const Color(0xFF5B7C99);
+      } else {
+        fillColor = const Color(0xFFEDE9E3);
+        borderColor = const Color(0xFFD5CDC1);
+      }
 
       for (final polygon in entry.value) {
         flutterPolygons.add(
@@ -1055,61 +1053,55 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                 : List.from(polygon.holes),
             color: fillColor,
             borderColor: borderColor,
-            borderStrokeWidth: 0.8,
+            borderStrokeWidth: 0.6,
             isFilled: true,
           ),
         );
       }
     }
 
-    return MouseRegion(
-      onExit: _handleHoverExit,
-      child: Listener(
-        onPointerMove: (_) => _onMapInteraction(),
-        onPointerDown: (_) => _onMapInteraction(),
-        child: FlutterMap(
-          mapController: _mapController,
-          options: MapOptions(
-            initialCenter: _initialCenter,
-            initialZoom: 2.3,
-            minZoom: 1.6,
-            maxZoom: 10,
-            cameraConstraint: CameraConstraint.contain(bounds: _worldBounds),
-            interactionOptions: const InteractionOptions(
-              flags:
-                  InteractiveFlag.pinchZoom |
-                  InteractiveFlag.drag |
-                  InteractiveFlag.doubleTapZoom |
-                  InteractiveFlag.flingAnimation,
-              enableMultiFingerGestureRace: true,
-            ),
-            onTap: _handleTap,
-            onPointerHover: _handleHover,
-          ),
-          children: [
-            Container(color: const Color(0xFFB8D4E8)),
-            PolygonLayer(polygons: flutterPolygons),
-            if (_flashPoint != null)
-              CircleLayer(
-                circles: [
-                  CircleMarker(
-                    point: _flashPoint!,
-                    radius: 8,
-                    useRadiusInMeter: false,
-                    color: const Color(0xFF5B7C99).withOpacity(0.6),
-                    borderColor: Colors.white,
-                    borderStrokeWidth: 2,
-                  ),
-                ],
-              ),
-          ],
+    return FlutterMap(
+      mapController: _mapController,
+      options: MapOptions(
+        initialCenter: _initialCenter,
+        initialZoom: 2.3,
+        minZoom: 1.5,
+        maxZoom: 8,
+        cameraConstraint: CameraConstraint.contain(
+          bounds: LatLngBounds(const LatLng(-85, -180), const LatLng(84, 180)),
         ),
+        interactionOptions: const InteractionOptions(
+          flags: InteractiveFlag.all,
+          enableMultiFingerGestureRace: true,
+          rotationThreshold: 20.0,
+          pinchZoomThreshold: 0.5,
+          pinchMoveThreshold: 40.0,
+          scrollWheelVelocity: 0.005,
+        ),
+        onTap: _handleTap,
+        keepAlive: true,
       ),
+      children: [
+        Container(color: const Color(0xFFB8D4E8)),
+        PolygonLayer(polygons: flutterPolygons),
+        if (_flashPoint != null)
+          CircleLayer(
+            circles: [
+              CircleMarker(
+                point: _flashPoint!,
+                radius: 8,
+                useRadiusInMeter: false,
+                color: const Color(0xFF5B7C99).withOpacity(0.6),
+                borderColor: Colors.white,
+                borderStrokeWidth: 2,
+              ),
+            ],
+          ),
+      ],
     );
   }
 }
 
-// ------------------ Drawer Menu Item ------------------
 class _DrawerMenuItem extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -1174,15 +1166,11 @@ class _DrawerMenuItem extends StatelessWidget {
   }
 }
 
-// ------------------ Legend Item ------------------
 class _LegendItem extends StatelessWidget {
   final Color color;
   final String label;
 
-  const _LegendItem({
-    required this.color,
-    required this.label,
-  });
+  const _LegendItem({required this.color, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -1195,10 +1183,7 @@ class _LegendItem extends StatelessWidget {
           decoration: BoxDecoration(
             color: color,
             borderRadius: BorderRadius.circular(4),
-            border: Border.all(
-              color: Colors.grey[400]!,
-              width: 0.5,
-            ),
+            border: Border.all(color: Colors.grey[400]!, width: 0.5),
           ),
         ),
         const SizedBox(width: 6),
